@@ -1,0 +1,1391 @@
+{
+  "info": {
+    "name": "驾考系统 · 预约模块回归测试",
+    "description": "预约模块回归测试（Day 18）。对应 doc/api-design.md §4.8 / §4.10、doc/appointment-design.md。\n\n【⚠️ 跑前必须先执行「准备 SQL」】\n① 清库（保证可重复跑）——⚠️ 会清空 appointment 全表，请确认无未备份的手动数据：\n  DELETE FROM appointment;\n② 造教练 / 第二学员账号（幂等，BCrypt 密文为已验过的 {{testPassword}}）：\n  INSERT INTO sys_user (username, password, real_name, role, status, deleted)\n  SELECT 'coach01', '<FILL_BCRYPT_HASH>', '李教练', 'COACH', 1, 0\n   WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username='coach01');\n  INSERT INTO sys_user (username, password, real_name, role, status, deleted)\n  SELECT 'student02', '<FILL_BCRYPT_HASH>', '王同学', 'STUDENT', 1, 0\n   WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username='student02');\n③ 保证绑定关系（student01 ↔ coach01 有效；student02 无有效绑定）：\n  INSERT INTO coach_student (coach_id, student_id, status)\n  SELECT c.id, s.id, 1 FROM sys_user c JOIN sys_user s\n   WHERE c.username='coach01' AND s.username='student01'\n  ON DUPLICATE KEY UPDATE status = 1;\n  UPDATE coach_student SET status = 0\n   WHERE student_id = (SELECT id FROM sys_user WHERE username='student02');\n\n【★ 本集合真实写库】\n一次完整运行会多次写 appointment 表（create / cancel / approve / reject / complete）。\n失败后要重跑，请**先再执行一次准备 SQL**（尤其 ① 清库）。\n\n【★ 必须按顺序跑】\n组 4 的夹具链式依赖同一条 06-03 记录：\n  TC-AP-24a（建占用）→ 24b（取 id）→ 24（再建 → 3002）→ 26a（approve → CONFIRMED）→ 26（再 approve → 3005）→ 27（学员 cancel → 3004）。\n顺序即依赖；若某步失败，后面几步会连带失败。\n\n【数据基线】\n账号 student01 / coach01 / student02，密码均 {{testPassword}}。\n业务日期固定用 2027-06-01 / 06-02 / 06-03（远未来，避开 @FutureOrPresent 随时间过期）；\n过去日期用例用 2020-01-01。coachId 由 TC-AP-01 动态提取，不硬编码。\n\n【★ 唯一真源：本文件】\n改了本 .json 后必须**重新导入 Apifox**，否则 Apifox 里跑的是旧副本。\n\n【前置】后端已启动；已执行上面「准备 SQL」。\n\n【⚠️ 已知假阳性】\n若你的 Apifox 项目开启了「默认断言：状态码=200」，则：\n· TC-AP-31a / 31b 会【必然报红】——401 / 403 是我们刻意返回的真实状态码；\n· 这是工具假阳性，不是系统 bug；看到这两条红，忽略即可。\n· 想彻底消除：项目设置 → 断言设置 → 关闭「默认断言」或对本集合关闭。\n这是本项目第 6 次遇到同一现象（前 5 次在错题本/AI/学情分析/考试模块）。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "testPassword", "value": "" },
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "studentToken", "value": "" },
+    { "key": "coachToken", "value": "" },
+    { "key": "token02", "value": "" },
+    { "key": "coachId", "value": "" },
+    { "key": "appointmentId", "value": "" },
+    { "key": "appointmentId2", "value": "" },
+    { "key": "appointmentId3", "value": "" },
+    { "key": "appointmentId4", "value": "" },
+    { "key": "fixtureId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备",
+      "description": "前置：已执行集合描述里的「准备 SQL」（清库 + 造账号 + 建绑定）。",
+      "item": [
+        {
+          "name": "00 · 登录（学员 student01）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 token\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"studentToken\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "00b · 登录（教练 coach01）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"coach01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"COACH\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 coachToken\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"coachToken\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "00c · 登录（学员 student02 · 越权 / 未绑定用）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student02\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 token02\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"token02\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "00d · 前置检查 · coach01 名下预约应为空（★库未清则失败）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ 库应为空（total=0）——失败=没执行准备 SQL ① 清库\", function () { pm.expect(j.data.total).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 前置守卫：若本条失败（total≠0）→ 你【没有执行准备 SQL ①（DELETE FROM appointment）】，库里有上次残留。请先清库再整组重跑，否则组 2/3/4 会连锁失败。\n★ 用教练端列表（而非学员端）做守卫：冲突按 coach + 日期 + 时段 判，教练端 total==0 才真正覆盖『06-03 时段没被占』这个前置。"
+        }
+      ]
+    },
+    {
+      "name": "1 · 我的教练",
+      "item": [
+        {
+          "name": "TC-AP-01 我的教练 · 有绑定 → 返回教练（并提取 coachId）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/coaches",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "coaches"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组且非空\", function () { pm.expect(j.data).to.be.an(\"array\").and.not.empty; });",
+                  "var c = j.data[0];",
+                  "pm.test(\"含 coachId / realName / phone\", function () { pm.expect(c).to.have.property(\"coachId\"); pm.expect(c).to.have.property(\"realName\"); pm.expect(c).to.have.property(\"phone\"); });",
+                  "try { pm.collectionVariables.set(\"coachId\", String(c.coachId)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "前置：student01 已绑定 coach01（status=1）。预期：返回教练列表非空，元素含 coachId / realName / phone；提取 coachId 供后续创建用。\n★ 刻意不断言 realName 的具体取值——那是数据值，不是系统行为；coach01 在库里可能已存在、姓名以库中为准。"
+        },
+        {
+          "name": "TC-AP-02 我的教练 · 未绑定 → 空数组（★边界）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token02}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/coaches",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "coaches"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（未绑定不是错误，不抛 3003）\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = []（空数组，不是 null）\", function () { pm.expect(j.data).to.be.an(\"array\").and.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：student02 无任何有效绑定。预期：空数组、code=200——『未绑定』不抛 3003（3003 只用于创建时指定的教练不是我的）。"
+        }
+      ]
+    },
+    {
+      "name": "2 · 主链路（创建→列表→详情→取消→再创建→approve→complete）",
+      "description": "全部用 coach01 / 2027-06-01 / 08:00-10:00。",
+      "item": [
+        {
+          "name": "TC-AP-03 创建预约 · 成功（返回 Void）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2027-06-01\",\n  \"timeSlot\": \"08:00-10:00\",\n  \"remark\": \"主链路测试\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已清库、coachId 已取。预期：创建成功、返回 Void（不返回新建 id，前端需重新拉列表）。"
+        },
+        {
+          "name": "TC-AP-04 我的预约列表 · 提取 appointmentId + 校验装配",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"records 非空\", function () { pm.expect(j.data.records.length).to.be.at.least(1); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"最新一条 status = PENDING\", function () { pm.expect(r.status).to.eql(\"PENDING\"); });",
+                  "pm.test(\"装配了 studentName / coachName\", function () { pm.expect(r.studentName).to.be.a(\"string\").and.not.empty; pm.expect(r.coachName).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"timeSlot = 08:00-10:00\", function () { pm.expect(r.timeSlot).to.eql(\"08:00-10:00\"); });",
+                  "try { pm.collectionVariables.set(\"appointmentId\", String(r.id)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "预期：列表按 create_time DESC, id DESC 排序，最新创建那条在最前；提取其 id 存入 appointmentId。"
+        },
+        {
+          "name": "TC-AP-05 预约详情 · status = PENDING",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var d = j.data;",
+                  "pm.test(\"status = PENDING\", function () { pm.expect(d.status).to.eql(\"PENDING\"); });",
+                  "pm.test(\"字段完整\", function () { pm.expect(d).to.include.keys(\"id\", \"studentId\", \"coachId\", \"subjectCode\", \"appointmentDate\", \"timeSlot\", \"status\"); });",
+                  "pm.test(\"appointmentDate = 2027-06-01\", function () { pm.expect(d.appointmentDate).to.eql(\"2027-06-01\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：本人预约详情，status=PENDING，字段完整。"
+        },
+        {
+          "name": "TC-AP-06 取消预约 · PENDING → 成功",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId}}", "cancel"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：该预约为 PENDING。预期：取消成功，落 CANCELLED。"
+        },
+        {
+          "name": "TC-AP-07 详情复核 · status = CANCELLED（证明写库生效）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"status = CANCELLED\", function () { pm.expect(j.data.status).to.eql(\"CANCELLED\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：再次拉详情，status 已由 PENDING 变 CANCELLED。"
+        },
+        {
+          "name": "TC-AP-08 再创建同一时段 · 应成功（★终态释放时段）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_3\",\n  \"appointmentDate\": \"2027-06-01\",\n  \"timeSlot\": \"08:00-10:00\",\n  \"remark\": \"终态释放验证\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（终态已释放时段，可再次预约）\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 边界：上一条同（教练/日期/时段）的预约已 CANCELLED（终态）→ 时段应释放，本处再创建必须成功。若实现把终态也算占用，这里会误报 3002。"
+        },
+        {
+          "name": "TC-AP-09 列表 · 提取新 appointmentId2",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"最新一条 status = PENDING\", function () { pm.expect(r.status).to.eql(\"PENDING\"); });",
+                  "try { pm.collectionVariables.set(\"appointmentId2\", String(r.id)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "预期：最新一条（刚重建的）为 PENDING，提取 id 存入 appointmentId2。"
+        },
+        {
+          "name": "TC-AP-10 教练侧列表 · 可见该预约 + 学员姓名",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"records 非空\", function () { pm.expect(j.data.records.length).to.be.at.least(1); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"最新一条 status = PENDING\", function () { pm.expect(r.status).to.eql(\"PENDING\"); });",
+                  "pm.test(\"教练端也装配 studentName\", function () { pm.expect(r.studentName).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：coach01 名下可见该预约，且带 studentName（两端共用一个 VO）。"
+        },
+        {
+          "name": "TC-AP-11 教练 approve · PENDING → 成功",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments/{{appointmentId2}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments", "{{appointmentId2}}", "approve"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：该预约为 PENDING。预期：审批通过，落 CONFIRMED。"
+        },
+        {
+          "name": "TC-AP-12 详情复核 · status = CONFIRMED",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId2}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId2}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"status = CONFIRMED\", function () { pm.expect(j.data.status).to.eql(\"CONFIRMED\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：approve 后 status=CONFIRMED。"
+        },
+        {
+          "name": "TC-AP-13 教练 complete · CONFIRMED → 成功",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments/{{appointmentId2}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments", "{{appointmentId2}}", "complete"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：该预约为 CONFIRMED。预期：标记完成，落 COMPLETED。"
+        },
+        {
+          "name": "TC-AP-14 详情复核 · status = COMPLETED（主链路收尾）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId2}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId2}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"status = COMPLETED\", function () { pm.expect(j.data.status).to.eql(\"COMPLETED\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：主链路终点 PENDING→CANCELLED（另起一条）→PENDING→CONFIRMED→COMPLETED 全部走通。"
+        }
+      ]
+    },
+    {
+      "name": "3 · 拒绝链路（创建 → reject → REJECTED）",
+      "description": "全部用 coach01 / 2027-06-02 / 10:00-12:00。",
+      "item": [
+        {
+          "name": "TC-AP-15 创建预约 · 成功（2027-06-02 / 10:00-12:00）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2027-06-02\",\n  \"timeSlot\": \"10:00-12:00\",\n  \"remark\": \"拒绝链路测试\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AP-16 列表 · 提取 appointmentId3",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"最新一条 status = PENDING\", function () { pm.expect(r.status).to.eql(\"PENDING\"); });",
+                  "try { pm.collectionVariables.set(\"appointmentId3\", String(r.id)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "预期：提取刚创建那条的 id 存入 appointmentId3。"
+        },
+        {
+          "name": "TC-AP-17 教练 reject · 带拒绝原因",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachRemark\": \"当日有事\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments/{{appointmentId3}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments", "{{appointmentId3}}", "reject"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：该预约为 PENDING。预期：拒绝成功，落 REJECTED（与学员取消的 CANCELLED 区分）。"
+        },
+        {
+          "name": "TC-AP-18 详情复核 · status = REJECTED + coachRemark",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId3}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId3}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ status = REJECTED（不是 CANCELLED）\", function () { pm.expect(j.data.status).to.eql(\"REJECTED\"); });",
+                  "pm.test(\"coachRemark = 当日有事\", function () { pm.expect(j.data.coachRemark).to.eql(\"当日有事\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 关键：拒绝落 REJECTED（区别于学员取消的 CANCELLED），原因写入 coachRemark。"
+        },
+        {
+          "name": "TC-AP-19 再创建同一时段 · 应成功（★REJECTED 也释放）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2027-06-02\",\n  \"timeSlot\": \"10:00-12:00\",\n  \"remark\": \"REJECTED 释放验证\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（REJECTED 终态同样释放时段）\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 边界：REJECTED 也是终态 → 时段释放，同时段可再创建。"
+        },
+        {
+          "name": "TC-AP-20a 前置 · 列表取 appointmentId4",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"最新一条 status = PENDING\", function () { pm.expect(r.status).to.eql(\"PENDING\"); });",
+                  "try { pm.collectionVariables.set(\"appointmentId4\", String(r.id)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "预期：提取 TC-AP-19 刚创建那条的 id 存入 appointmentId4，供 reject 使用。"
+        },
+        {
+          "name": "TC-AP-20 教练 reject · 不填原因（body = {}，coachRemark 可空）",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments/{{appointmentId4}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments", "{{appointmentId4}}", "reject"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（coachRemark 可空）\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：TC-AP-20a 已把刚建那条的 id 存入 appointmentId4。预期：body 传 {} 即不填原因，仍返回 200。"
+        },
+        {
+          "name": "TC-AP-21 详情复核 · REJECTED 且 coachRemark = null",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId4}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId4}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"status = REJECTED\", function () { pm.expect(j.data.status).to.eql(\"REJECTED\"); });",
+                  "pm.test(\"coachRemark = null（未填原因）\", function () { pm.expect(j.data.coachRemark).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：不填原因时 coachRemark 为 null，status 仍为 REJECTED。"
+        }
+      ]
+    },
+    {
+      "name": "4 · 错误路径（3001 / 3002 / 3003 / 3004 / 3005 / 1001 / 鉴权）",
+      "description": "★ 本组按顺序跑：夹具用 coach01 / 2027-06-03 / 14:00-16:00，链式复用同一条记录（24a→24b→24→26a→26→27）。",
+      "item": [
+        {
+          "name": "TC-AP-22 ❌ 3001 · 不存在的 id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "999999"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3001\", function () { pm.expect(j.code).to.eql(3001); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：预约不存在 → 3001。"
+        },
+        {
+          "name": "TC-AP-23 ❌ 3001 · 越权访问他人预约（与 AP-22 同响应）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token02}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{appointmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{appointmentId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（不返 403）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3001（与『不存在』完全相同，不泄露存在性）\", function () { pm.expect(j.code).to.eql(3001); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：appointmentId 属于 student01。预期：student02 访问 → 3001，与『不存在』同一响应，不泄露『这条确实存在』。"
+        },
+        {
+          "name": "TC-AP-24a 前置 · 建夹具占用（2027-06-03 / 14:00-16:00）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2027-06-03\",\n  \"timeSlot\": \"14:00-16:00\",\n  \"remark\": \"错误路径夹具\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（夹具建立成功）\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "夹具：建一条 PENDING 占用 06-03/14:00-16:00，供后续 3002 / 3005 / 3004 复用。"
+        },
+        {
+          "name": "TC-AP-24b 前置 · 列表取 fixtureId",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"最新一条 status = PENDING\", function () { pm.expect(r.status).to.eql(\"PENDING\"); });",
+                  "try { pm.collectionVariables.set(\"fixtureId\", String(r.id)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "预期：提取夹具记录 id 存入 fixtureId。"
+        },
+        {
+          "name": "TC-AP-24 ❌ 3002 · 时段冲突（同时段再创建）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_3\",\n  \"appointmentDate\": \"2027-06-03\",\n  \"timeSlot\": \"14:00-16:00\",\n  \"remark\": \"应当冲突\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3002（该时段已被占用）\", function () { pm.expect(j.code).to.eql(3002); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：夹具已 PENDING 占用 06-03/14:00-16:00。预期：3002。"
+        },
+        {
+          "name": "TC-AP-25 ❌ 3003 · 未绑定教练（coachId = 999999）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": 999999,\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2027-06-01\",\n  \"timeSlot\": \"08:00-10:00\",\n  \"remark\": \"未绑定\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3003（该教练不是本人有效绑定的教练）\", function () { pm.expect(j.code).to.eql(3003); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：student01 未绑定 coachId=999999。预期：3003（绑定校验先于冲突校验）。"
+        },
+        {
+          "name": "TC-AP-26a 前置 · approve 夹具 → CONFIRMED",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments/{{fixtureId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments", "{{fixtureId}}", "approve"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（夹具转 CONFIRMED）\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "把夹具从 PENDING 变 CONFIRMED，供 3005 / 3004 使用。"
+        },
+        {
+          "name": "TC-AP-26 ❌ 3005 · 非 PENDING 再 approve",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{coachToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments/{{fixtureId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments", "{{fixtureId}}", "approve"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3005（当前状态不允许此操作）\", function () { pm.expect(j.code).to.eql(3005); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：夹具已 CONFIRMED。预期：再次 approve → 3005。"
+        },
+        {
+          "name": "TC-AP-27 ❌ 3004 · 非 PENDING 取消（学员取消已 CONFIRMED）",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment/{{fixtureId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment", "{{fixtureId}}", "cancel"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3004（仅可取消待确认的预约）\", function () { pm.expect(j.code).to.eql(3004); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：夹具已 CONFIRMED。预期：学员取消 → 3004（CONFIRMED 后需联系教练）。"
+        },
+        {
+          "name": "TC-AP-28 ❌ 1001 · 小写 status（枚举大小写敏感）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment?status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"],
+              "query": [{ "key": "status", "value": "pending" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（不是 500）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（参数类型不匹配）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：小写枚举名触发 MethodArgumentTypeMismatchException → 1001（大小写敏感是有意设计）。"
+        },
+        {
+          "name": "TC-AP-29 ❌ 1001 · 非法时段（不在四个固定值内）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2027-06-01\",\n  \"timeSlot\": \"09:00-11:00\",\n  \"remark\": \"非法时段\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（@Pattern 拦截）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：timeSlot 不在 08:00-10:00 / 10:00-12:00 / 14:00-16:00 / 16:00-18:00 内 → 1001。"
+        },
+        {
+          "name": "TC-AP-30 ❌ 1001 · 过去日期（@FutureOrPresent）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_2\",\n  \"appointmentDate\": \"2020-01-01\",\n  \"timeSlot\": \"08:00-10:00\",\n  \"remark\": \"过去日期\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（日期早于今天）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：appointmentDate 早于今天 → 1001（@FutureOrPresent 接受今天，仅拒绝过去）。"
+        },
+        {
+          "name": "TC-AP-31a ❌ 鉴权 · 无 token → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：无 token → 真实 HTTP 401。"
+        },
+        {
+          "name": "TC-AP-31b ❌ 鉴权 · 学员 token 访问教练端 → HTTP 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/appointments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coach", "appointments"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：STUDENT 访问 /api/coach/** → 真实 HTTP 403（PathRoleRule 拦截）。"
+        },
+        {
+          "name": "TC-AP-32 ❌ 1001 · 非法科目（SUBJECT_1 不属预约范围）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": {{coachId}},\n  \"subjectCode\": \"SUBJECT_1\",\n  \"appointmentDate\": \"2027-06-01\",\n  \"timeSlot\": \"08:00-10:00\",\n  \"remark\": \"非法科目\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（预约只服务科二/科三）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：subjectCode=SUBJECT_1 → @Pattern 拦截 → 1001（预约仅限 SUBJECT_2 / SUBJECT_3）。"
+        },
+        {
+          "name": "TC-AP-33 ❌ 1001 · 不传 body（缺请求体）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/appointment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "appointment"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200，不是 500）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（请求体缺失）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "预期：缺 body → 1001（不是 500），回归 Day17 补的 HttpMessageNotReadableException 处理器。\n★ 本用例覆盖的是 HttpMessageNotReadableException → 1001 这条分支，不是 DTO 校验失败的 1001——两者错误码相同、触发路径不同。"
+        }
+      ]
+    }
+  ]
+}

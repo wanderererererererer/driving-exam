@@ -1,0 +1,75 @@
+# ============================================================
+# 驾考智能辅导系统 · 根目录 .gitignore
+# 用途：仅忽略构建产物 / 依赖 / IDE / 本地环境 / 明文凭据文件。
+# 注意：**不要**忽略全部 *.yml、*.sql 或整个 doc/——
+#       那会误伤 application-test.yml、sql/*.sql 脚本、设计文档与答辩材料。
+# ============================================================
+
+# ---------- Java / Maven 构建产物 ----------
+target/
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+# 若日后添加 Maven Wrapper，请保留其 jar（当前仓库无 mvnw/.mvn）
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---------- 前端 Vue3 / Vite ----------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+.eslintcache
+*.local
+
+# 本地环境变量：保留非密的 .env.development；忽略本地覆盖文件
+.env
+.env.local
+.env.*.local
+
+# ---------- IDE / 编辑器 ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.vscode/
+!.vscode/extensions.json
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 日志 / 临时 ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tmp
+*.swp
+*~
+
+# ---------- 敏感配置（不入库）----------
+# 1) 后端主配置：含明文数据库口令 → 忽略真实文件，改由 application.yml.example 模板 + 环境变量
+driving-exam/driving-exam-server/src/main/resources/application.yml
+# 2) 顶层配置明文汇总转储（含数据库口令）→ 排除
+/configs.txt
+# 3) 派生的文件树清单（可再生成）→ 排除
+/file-tree.txt
+
+# ---------- 其它工程（早期废弃脚手架，非本项目）----------
+/backend - bake/
+
+# ============================================================
+# 明确保留入库（勿忽略）：
+#   - driving-exam/**/src/main/resources/application-test.yml（仅 ${环境变量} 占位符，无明文）
+#   - sql/*.sql（DDL / seed / alter 脚本）
+#   - doc/**（设计文档、Day 工作日志、Test 报告、testjson 集合、testsql 脚本、答辩材料）
+#   - frontend/.env.development（当前仅 VITE_API_BASE_URL=/api，非密）
+#   - pom.xml / package.json / package-lock.json / *.ts / *.vue / *.java 等源码与依赖清单
+# ============================================================

@@ -1,0 +1,2423 @@
+{
+  "info": {
+    "name": "驾考系统 · 教练学员管理回归测试",
+    "description": "【★ 先读 · 停止规则】若任一【登录请求】或【前置守卫（00e / 00f / 00g / 00h）】失败，请【立即停止本轮执行】，先处理根因（最常见是未执行《准备 SQL》，或专用账号状态异常），【不要】继续跑后续业务用例——否则后续请求会因集合变量为空而级联误报，掩盖真正的根因。\n\n教练端 · 学员管理回归测试（Day19 · 5 个接口）。对应 doc/api-design.md §4.10 与 doc/coach-student-design.md。\n\n【⚠️ 跑前必须先执行《准备 SQL》】\n见 doc/testsql/coach-student-test-setup.sql（**草案，需人工审阅后手动执行**）。它只做三件事：\n  ① 幂等新建专用账号 coach02 / coach03 / student_cs01 / student_cs02（已存在则跳过，**不改其密码/角色/状态**）；\n  ② 幂等建立 coach01↔student_cs01、coach02↔student_cs02 两组绑定（仅绑定【未逻辑删除且角色相符】的有效账号）；\n  ③ 【可选 · 默认禁用】复位 student02 的绑定（status=0）——该语句在准备 SQL 中已被注释掉，非通用前置；\n     若需 TC-CS-04 可重复跑，请人工按准备 SQL 第 3 步说明（限定 coach_id）单独启用。\n★ 它**绝不清空 appointment 表**，**绝不动 coach01 ↔ student01 这条既有有效绑定**，也**不做全表清理**。\n\n【★ 本集合真实写库】\n会写 coach_student（绑定/解绑/重绑）、sys_user（创建 cs_new_01）、student_subject_status（更新学情）。\n失败后重跑：先执行《准备 SQL》的「定向清理」段（默认禁用，只清专用账号相关行），再跑本集合。\n\n【★ 唯一真源：本文件】\n改了本 .json 后必须**重新导入 Apifox**（先删旧集合再导入，避免新增项被追加到末尾打乱顺序）。\n\n【★ 已知假阳性】\nTC-CS-16a/16b/16c 期望真实的 401/403。若你的 Apifox 项目开启了「默认断言：状态码=200」，\n这三条会【必然报红】——属**工具假阳性**，不是系统缺陷（本项目第 N 次同因）。\n它们计入界面\"失败数\"，**不计入\"断言失败数\"**；看结果时请分开看。\n\n【数据基线（生成时快照，仅供参考，不作为断言依据）】\ncoach_student 原有 1 条：bind_id=1（coach01 ↔ student01, status=1）。\n本集合**不修改**它；请全程用只读 SQL 保护性核对。\n\n【前置】后端已启动；已执行《准备 SQL》。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "testPassword",
+      "value": ""
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "coachToken",
+      "value": ""
+    },
+    {
+      "key": "coachBToken",
+      "value": ""
+    },
+    {
+      "key": "coachCToken",
+      "value": ""
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "bindId",
+      "value": ""
+    },
+    {
+      "key": "bindIdB",
+      "value": ""
+    },
+    {
+      "key": "bindIdBeforeUnbind",
+      "value": ""
+    },
+    {
+      "key": "protectedBindId",
+      "value": ""
+    },
+    {
+      "key": "student_cs01_uid",
+      "value": ""
+    },
+    {
+      "key": "notFoundBody",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备（登录 + 前置守卫）",
+      "item": [
+        {
+          "name": "00 · 登录（教练A coach01）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"coach01\", \"password\": \"{{testPassword}}\", \"role\": \"COACH\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var okTok = !!(j && j.data && typeof j.data.token === \"string\" && j.data.token.length > 0);",
+                  "pm.test(\"拿到 coachToken\", function () { pm.expect(okTok).to.eql(true); });",
+                  "pm.collectionVariables.set(\"coachToken\", okTok ? j.data.token : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "登录 coach01（role=COACH），token 存入集合变量 coachToken。密码取自本地配置的集合变量 {{testPassword}}（不含任何密钥）。"
+        },
+        {
+          "name": "00b · 登录（教练B coach02 · 越权用）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"coach02\", \"password\": \"{{testPassword}}\", \"role\": \"COACH\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var okTok = !!(j && j.data && typeof j.data.token === \"string\" && j.data.token.length > 0);",
+                  "pm.test(\"拿到 coachBToken\", function () { pm.expect(okTok).to.eql(true); });",
+                  "pm.collectionVariables.set(\"coachBToken\", okTok ? j.data.token : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "登录 coach02（role=COACH），token 存入集合变量 coachBToken。密码取自本地配置的集合变量 {{testPassword}}（不含任何密钥）。"
+        },
+        {
+          "name": "00c · 登录（教练C coach03 · 空列表用）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"coach03\", \"password\": \"{{testPassword}}\", \"role\": \"COACH\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var okTok = !!(j && j.data && typeof j.data.token === \"string\" && j.data.token.length > 0);",
+                  "pm.test(\"拿到 coachCToken\", function () { pm.expect(okTok).to.eql(true); });",
+                  "pm.collectionVariables.set(\"coachCToken\", okTok ? j.data.token : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "登录 coach03（role=COACH），token 存入集合变量 coachCToken。密码取自本地配置的集合变量 {{testPassword}}（不含任何密钥）。"
+        },
+        {
+          "name": "00d · 登录（学员 student01 · 403 用）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"student01\", \"password\": \"{{testPassword}}\", \"role\": \"STUDENT\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var okTok = !!(j && j.data && typeof j.data.token === \"string\" && j.data.token.length > 0);",
+                  "pm.test(\"拿到 studentToken\", function () { pm.expect(okTok).to.eql(true); });",
+                  "pm.collectionVariables.set(\"studentToken\", okTok ? j.data.token : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "登录 student01（role=STUDENT），token 存入集合变量 studentToken。密码取自本地配置的集合变量 {{testPassword}}（不含任何密钥）。"
+        },
+        {
+          "name": "00e · 前置守卫 · 教练A 名下应含 student_cs01（并提取 bindId）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var recs = (j.data && j.data.records) || [];",
+                  "var hit = recs.filter(function (r) { return r.username === 'student_cs01'; });",
+                  "pm.test(\"★ 列表应含 student_cs01（失败=未执行准备 SQL）\", function () { pm.expect(hit.length).to.eql(1); });",
+                  "var okHit = hit.length === 1 && hit[0] && hit[0].bindId !== undefined && hit[0].bindId !== null;",
+                  "pm.test(\"提取到有效 bindId / studentId\", function () { pm.expect(okHit).to.eql(true); pm.expect(hit.length === 1 && typeof hit[0].studentId === \"number\").to.eql(true); });",
+                  "pm.collectionVariables.set(\"bindId\", okHit ? String(hit[0].bindId) : \"\");",
+                  "pm.collectionVariables.set(\"student_cs01_uid\", (hit.length === 1 && hit[0] && typeof hit[0].studentId === \"number\") ? String(hit[0].studentId) : \"\");",
+                  "var keep = recs.filter(function (r) { return r.username === 'student01'; });",
+                  "pm.test(\"★ 保护：student01 的绑定存在（本轮全程不得改动它）\", function () { pm.expect(keep.length).to.eql(1); });",
+                  "var okKeep = keep.length === 1 && keep[0] && keep[0].bindId !== undefined && keep[0].bindId !== null;",
+                  "pm.collectionVariables.set(\"protectedBindId\", okKeep ? String(keep[0].bindId) : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "★ 前置守卫：若失败 → 你未执行《准备 SQL》；或 student_cs01 未绑定到 coach01。\n同时提取 bindId（= coach_student.id）与 studentId，并记录被保护的 student01 绑定 id。\n注意区分：bindId 用于 PUT/DELETE/{id}/status，studentId 仅为学员用户 id。\n★ 提取健壮性：仅当筛选结果恰为 1 条且 bindId 有效时才写入；否则【清空】bindId / student_cs01_uid / protectedBindId，绝不沿用上一次运行的旧 id（防止级联误报）。"
+        },
+        {
+          "name": "00f · 前置守卫 · 教练B 名下应含 student_cs02（提取 bindIdB）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachBToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var recs = (j.data && j.data.records) || [];",
+                  "var hit = recs.filter(function (r) { return r.username === 'student_cs02'; });",
+                  "pm.test(\"★ 教练B 应已绑定 student_cs02（失败=未执行准备 SQL）\", function () { pm.expect(hit.length).to.eql(1); });",
+                  "var okBindB = hit.length === 1 && hit[0] && hit[0].bindId !== undefined && hit[0].bindId !== null;",
+                  "pm.test(\"提取到有效 bindIdB\", function () { pm.expect(okBindB).to.eql(true); });",
+                  "pm.collectionVariables.set(\"bindIdB\", okBindB ? String(hit[0].bindId) : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "越权夹具：coach02 ↔ student_cs02（准备 SQL 建立）。提取 bindIdB 供越权用例使用。\n★ 提取健壮性：仅当筛选结果恰为 1 条且 bindId 有效时才写入；否则【清空】bindIdB，绝不沿用旧值。"
+        },
+        {
+          "name": "00g / TC-CS-19 · 前置守卫 · 教练C 名下应为空（★空列表用例的实测点）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachCToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ 空列表：total = 0 且 records 为空数组（不是错误）\", function () { pm.expect(j.data.total).to.eql(0); pm.expect(j.data.records).to.be.an(\"array\").and.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 本条同时承担『前置守卫』与『TC-CS-19 空列表用例』两个角色：\ncoach03 不应有任何绑定（准备 SQL 刻意不给它建绑定）→ 期望 total=0、records=[]、code=200，\n空结果**不是错误**。若失败 → 说明 coach03 被误建了绑定，或准备 SQL 未按预期执行。"
+        }
+      ]
+    },
+    {
+      "name": "1 · 学员列表（GET /api/coach/students）",
+      "item": [
+        {
+          "name": "TC-CS-01 学员列表 · 返回字段齐备（含 bindId 与 studentId）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"records 非空\", function () { pm.expect(j.data.records.length).to.be.at.least(2); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"含 bindId / studentId / username / bindTime\", function () { pm.expect(r).to.include.keys(\"bindId\", \"studentId\", \"username\", \"bindTime\"); });",
+                  "pm.test(\"bindId 与 studentId 均为数字\", function () { pm.expect(r.bindId).to.be.a(\"number\"); pm.expect(r.studentId).to.be.a(\"number\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已执行《准备 SQL》。coach01 名下应有 student01 与 student_cs01 两条有效绑定。"
+        },
+        {
+          "name": "TC-CS-01b 学员列表 · 排序 bind_time DESC, id DESC",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var rs = j.data.records || [];",
+                  "pm.test(\"至少 2 条才可判序\", function () { pm.expect(rs.length).to.be.at.least(2); });",
+                  "var ok = true; for (var i = 0; i + 1 < rs.length; i++) { var a = new Date(rs[i].bindTime).getTime(), b = new Date(rs[i+1].bindTime).getTime(); if (a < b || (a === b && rs[i].id < rs[i+1].id)) { ok = false; } }",
+                  "pm.test(\"按 bind_time DESC, id DESC\", function () { pm.expect(ok).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "description": "次级键 id 保证同秒记录全序稳定（该字段用于排序，列表不返回 id，故仅断言时间单调）。"
+        },
+        {
+          "name": "TC-CS-01c 学员列表 · pageSize 上限（传 100 实际 ≤ 20）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=1&pageSize=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ pageSize 被强制到上限 20（pageSize 字段与记录数均 ≤ 20）\", function () { pm.expect(j.data.pageSize).to.be.at.most(20); pm.expect(j.data.records.length).to.be.at.most(20); });"
+                ]
+              }
+            }
+          ],
+          "description": "上限 20 来自 CoachStudentServiceImpl.MAX_PAGE_SIZE。"
+        },
+        {
+          "name": "TC-CS-01d 学员列表 · pageSize 非法（0）回落默认 10",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=1&pageSize=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ pageSize 回落到默认 10\", function () { pm.expect(j.data.pageSize).to.eql(10); });"
+                ]
+              }
+            }
+          ],
+          "description": "pageSize < 1 → 取 DEFAULT_PAGE_SIZE(10)。"
+        },
+        {
+          "name": "TC-CS-01e 学员列表 · pageNum 非法（-1）回落 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=-1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "-1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ pageNum 回落到 1\", function () { pm.expect(j.data.pageNum).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "description": "pageNum < 1 → 取 1。"
+        },
+        {
+          "name": "TC-CS-16 学员列表 · 不泄露 password / deleted 等敏感或内部字段",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageNum=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var r = j.data.records[0];",
+                  "pm.test(\"★ 不含 password\", function () { pm.expect(r).to.not.have.property(\"password\"); });",
+                  "pm.test(\"★ 不含 deleted\", function () { pm.expect(r).to.not.have.property(\"deleted\"); });",
+                  "pm.test(\"★ 不含 avatar / 绑定状态 status（设计已排除）\", function () { pm.expect(r).to.not.have.property(\"avatar\"); pm.expect(r).to.not.have.property(\"status\"); });",
+                  "pm.test(\"★ 原始响应文本中不含 BCrypt 特征串 $2\", function () { pm.expect(pm.response.text().indexOf('$2') < 0).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "description": "对应设计文档 §3.1『刻意不返回』清单。"
+        }
+      ]
+    },
+    {
+      "name": "2 · 绑定 / 创建学员（POST · 会写库）",
+      "item": [
+        {
+          "name": "TC-CS-04 绑定已有学员 student02（只传 username）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"student02\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "数据影响：在 coach_student 新增/恢复 coach01 ↔ student02 的有效绑定。前置：student02 尚未与 coach01 有效绑定（准备 SQL ④ 已复位）。"
+        },
+        {
+          "name": "TC-CS-05 重复绑定同一学员 → 3101",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"student02\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3101（该学员已绑定）\", function () { pm.expect(j.code).to.eql(3101); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：TC-CS-04 已建立有效绑定。数据影响：无（被拒）。"
+        },
+        {
+          "name": "TC-CS-08 绑定目标角色不是 STUDENT（用 coach01 自己的用户名）→ 1106",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"coach01\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1106（该账号与所选角色不匹配）\", function () { pm.expect(j.code).to.eql(1106); });"
+                ]
+              }
+            }
+          ],
+          "description": "coach01 的 role=COACH（≠STUDENT）→ 服务端在『账号已存在』分支即拒绝。数据影响：无。"
+        },
+        {
+          "name": "00h · 前置守卫 · cs_new_01 不应已存在（弱守卫，须配合只读 SQL）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var recs = (j.data && j.data.records) || [];",
+                  "var hit = recs.filter(function (r) { return r.username === 'cs_new_01'; });",
+                  "pm.test(\"★ 弱守卫：cs_new_01 不应出现在 coach01 名下（出现=上次残留，先人工核查后重跑，勿继续）\", function () { pm.expect(hit.length).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 前置守卫（★ 弱守卫 · 只读）——在 TC-CS-06『创建新账号』之前执行。\n本守卫【只能】证明 cs_new_01 未绑定到 coach01，【不能】证明它在【全局】不存在——列表接口只返回当前教练的学员列表，无全局账号查询能力。\n局限与风险：若本守卫通过、但 cs_new_01 其实已在别处存在，TC-CS-06 会走『账号已存在 → 只绑定』分支，仍返回 code=200 → 【假绿】（'创建'路径未被真正测到）。\n因此执行前【必须】用只读 SQL 核验全局存在性（见 doc/test-cases-coach-student.md §八『TC-CS-06 前置（全局核查）』）：\n  SELECT id, username, role, status, deleted FROM sys_user WHERE username = 'cs_new_01';  -- 期望 0 行\n只有该 SQL 返回 0 行，本守卫 + TC-CS-06 的组合才是有效的『创建新账号』测试。\n本守卫【只读】：不删除账号、不解绑、不改任何数据。"
+        },
+        {
+          "name": "TC-CS-06 创建并绑定新学员 cs_new_01（四项齐全）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"cs_new_01\", \"realName\": \"测试学员\", \"phone\": \"13900000001\", \"password\": \"abc123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ 响应体不含明文密码 abc123\", function () { pm.expect(pm.response.text().indexOf('abc123') < 0).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：紧前的 00h 弱守卫（列表不含 cs_new_01）+ 【只读 SQL 全局核验 0 行】（见 §八『TC-CS-06 前置（全局核查）』）。二者缺一 → 本用例可能假绿。\n数据影响：新增 sys_user(cs_new_01, role=STUDENT, status=1, 密码 BCrypt) + coach_student 绑定。★ 清理见《准备 SQL》的清理章节（默认禁用）。"
+        },
+        {
+          "name": "TC-CS-07 创建模式缺 realName → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"cs_bad_01\", \"phone\": \"13900000002\", \"password\": \"abc123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（Service 手写判空）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：username=cs_bad_01 不存在（否则会走绑定分支）。数据影响：无（被拒）。"
+        },
+        {
+          "name": "TC-CS-07b 创建模式缺 phone → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"cs_bad_02\", \"realName\": \"测试\", \"password\": \"abc123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "同 TC-CS-07，缺 phone。"
+        },
+        {
+          "name": "TC-CS-07c 创建模式缺 password → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"cs_bad_03\", \"realName\": \"测试\", \"phone\": \"13900000003\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "同 TC-CS-07，缺 password。"
+        },
+        {
+          "name": "TC-CS-07d 手机号格式非法 → 1001（DTO @Pattern）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"cs_bad_04\", \"realName\": \"测试\", \"phone\": \"12345\", \"password\": \"abc123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 手机号格式 1[3-9]\\d{9} 是**本项目新增约束**（非既有统一规范），登记在 StudentBindDTO 的 @Pattern 上。"
+        },
+        {
+          "name": "TC-CS-07e 密码长度不足 6 位 → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"cs_bad_05\", \"realName\": \"测试\", \"phone\": \"13900000005\", \"password\": \"abc12\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 长度 6~64 是**本次新增规则**（非仓库既有约定），见设计文档 §八 Q14。"
+        },
+        {
+          "name": "TC-CS-07f 用户名超长（51 字）→ 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"ccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"realName\": \"测试\", \"phone\": \"13900000006\", \"password\": \"abc123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "username 列 varchar(50) → @Size(max=50)。"
+        }
+      ]
+    },
+    {
+      "name": "3 · 更新学情（PUT /{id} · 会写库）",
+      "item": [
+        {
+          "name": "TC-CS-09 更新学情 · 目标科目无记录 → 新建（SUBJECT_1=LEARNING + 备注）",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"phaseStatus\": \"LEARNING\", \"coachRemark\": \"首次建档\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "数据影响：student_subject_status 为 student_cs01 新增/更新 SUBJECT_1 行（upsertCoachFields）。绑定的归属校验先于写入。"
+        },
+        {
+          "name": "TC-CS-10 更新学情 · 只传备注 → status 保持原值（COALESCE 语义）",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"coachRemark\": \"只改备注\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 本条只断言『未被拒』。『status 仍为 LEARNING、coachRemark 变为 只改备注』需用 SQL 只读核验（见 TC-CS-10 的 SQL 检查）。"
+        },
+        {
+          "name": "TC-CS-09b 更新学情 · 只传阶段 → 备注保持（COALESCE 语义）",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"phaseStatus\": \"READY_FOR_EXAM\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 同样需 SQL 核验备注未被清空。"
+        },
+        {
+          "name": "TC-CS-11 更新学情 · 两个可选字段都不传 → 1001",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "数据影响：无。"
+        },
+        {
+          "name": "TC-CS-11b 更新学情 · 两个可选字段都传空串 → 1001",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"phaseStatus\": \"\", \"coachRemark\": \"\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（空白串按未传处理）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "Service 用 StringUtils.hasText 归一空白串为 null。"
+        },
+        {
+          "name": "TC-CS-18 subjectCode 非法（SUBJECT_5）→ 1001",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_5\", \"phaseStatus\": \"LEARNING\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "DTO @Pattern 全串匹配（无需 ^$）。"
+        },
+        {
+          "name": "TC-CS-18b subjectCode 小写（subject_1）→ 1001",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"subject_1\", \"phaseStatus\": \"LEARNING\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（大小写敏感）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "大小写敏感、非静默。"
+        },
+        {
+          "name": "TC-CS-18c phaseStatus 非法（FINISHED）→ 1001",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"phaseStatus\": \"FINISHED\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "合法值仅 NOT_STARTED/LEARNING/READY_FOR_EXAM/EXAM_PASSED/EXAM_FAILED。"
+        },
+        {
+          "name": "TC-CS-18d coachRemark 超长（501 字）→ 1001",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"coachRemark\": \"备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备备\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（对应 varchar(500)）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "@Size(max=500)。"
+        },
+        {
+          "name": "TC-CS-14a 更新学情 · 不存在的 bindId → 3102",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "999999"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"phaseStatus\": \"LEARNING\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102（绑定关系不存在）\", function () { pm.expect(j.code).to.eql(3102); });",
+                  "pm.collectionVariables.set(\"notFoundBody\", (j && typeof j.code === \"number\") ? JSON.stringify(j) : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "★ 记录响应体到 notFoundBody，供 TC-CS-14 比对『越权与不存在同响应』。"
+        },
+        {
+          "name": "TC-CS-14 越权 · 教练A 更新教练B 的绑定 → 3102（与不存在同响应）",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindIdB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindIdB}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subjectCode\": \"SUBJECT_1\", \"phaseStatus\": \"LEARNING\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102\", function () { pm.expect(j.code).to.eql(3102); });",
+                  "pm.test(\"★ 与『不存在』的响应逐字相同（不泄露存在性）\", function () { pm.expect(JSON.stringify(j)).to.eql(pm.collectionVariables.get(\"notFoundBody\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "路径用 bindIdB（coach02 名下的绑定），token 用 coachToken。数据影响：无（被拒）。"
+        }
+      ]
+    },
+    {
+      "name": "4 · 解绑与重新绑定（DELETE + POST · 会写库）",
+      "item": [
+        {
+          "name": "TC-CS-12 解绑 student_cs01（status → 0，行保留）",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data = null（Void）\", function () { pm.expect(j.data).to.eql(null); });",
+                  "var curBindId = pm.collectionVariables.get(\"bindId\");",
+                  "pm.collectionVariables.set(\"bindIdBeforeUnbind\", (typeof curBindId === \"string\" && curBindId.length > 0) ? curBindId : \"\");"
+                ]
+              }
+            }
+          ],
+          "description": "★ 数据影响：coach_student 该行 status 置 0（软解绑，不删行、不级联删预约/历史）。『行保留、status=0、预约未被删』需 SQL 只读核验。"
+        },
+        {
+          "name": "TC-CS-13 重复解绑同一 id → 3102",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102\", function () { pm.expect(j.code).to.eql(3102); });"
+                ]
+              }
+            }
+          ],
+          "description": "已解绑 → 归属校验 0 行 → 3102。数据影响：无。"
+        },
+        {
+          "name": "TC-CS-13b 不存在的 id 解绑 → 3102",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102\", function () { pm.expect(j.code).to.eql(3102); });"
+                ]
+              }
+            }
+          ],
+          "description": "与 TC-CS-13 同一响应。"
+        },
+        {
+          "name": "TC-CS-14c 越权解绑 · 教练A 解绑教练B 的绑定 → 3102",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindIdB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindIdB}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102\", function () { pm.expect(j.code).to.eql(3102); });"
+                ]
+              }
+            }
+          ],
+          "description": "数据影响：无（被拒）。★ 若此处返回 200，说明存在严重越权缺陷。"
+        },
+        {
+          "name": "TC-CS-13c 已解绑记录的学情查询 → 3102",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102（已解绑不可再访问）\", function () { pm.expect(j.code).to.eql(3102); });"
+                ]
+              }
+            }
+          ],
+          "description": "解绑后同一 id 的任何操作都不可访问。"
+        },
+        {
+          "name": "TC-CS-05b 重新绑定 student_cs01 → 应复用同一条 coach_student 行",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"student_cs01\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（解绑后可重新绑定）\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 数据影响：复用原 coach_student 行，status=1、bind_time 刷新。『id 未变』由下一步 TC-CS-05c 断言。"
+        },
+        {
+          "name": "TC-CS-05c 重新绑定后 · bindId 未变（证明复用行而非插新行）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students?pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var hit = (j.data.records || []).filter(function (r) { return r.username === 'student_cs01'; });",
+                  "pm.test(\"student_cs01 重新出现在有效列表中\", function () { pm.expect(hit.length).to.eql(1); });",
+                  "var reBindId = (hit.length === 1 && hit[0] && hit[0].bindId !== undefined && hit[0].bindId !== null) ? String(hit[0].bindId) : \"\";",
+                  "pm.test(\"★ bindId 与解绑前相同（复用同一条绑定行，未违反 uk_coach_student）\", function () { pm.expect(reBindId).to.not.eql(\"\"); pm.expect(reBindId).to.eql(pm.collectionVariables.get(\"bindIdBeforeUnbind\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 这是『解绑后重绑复用同一行』的关键断言；bind_time 是否刷新需 SQL 只读核验。"
+        }
+      ]
+    },
+    {
+      "name": "5 · 学员学情（GET /{id}/status · 只读）",
+      "item": [
+        {
+          "name": "TC-CS-15 学情 · 固定四科 + 缺失科目补 NOT_STARTED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var d = j.data;",
+                  "pm.test(\"★ 长度为 4\", function () { pm.expect(d.length).to.eql(4); });",
+                  "pm.test(\"★ 顺序为 SUBJECT_1..4\", function () { pm.expect(d.map(function (x) { return x.subjectCode; })).to.eql([\"SUBJECT_1\",\"SUBJECT_2\",\"SUBJECT_3\",\"SUBJECT_4\"]); });",
+                  "pm.test(\"每条含 subjectCode/status/mockPassCount/lastMockScore\", function () { d.forEach(function (x) { pm.expect(x).to.include.keys(\"subjectCode\",\"status\",\"mockPassCount\",\"lastMockScore\"); }); });",
+                  "pm.test(\"SUBJECT_2~4 缺记录时为 NOT_STARTED / 0 / null\", function () { [d[1],d[2],d[3]].forEach(function (x) { pm.expect(x.status).to.eql(\"NOT_STARTED\"); pm.expect(x.mockPassCount).to.eql(0); pm.expect(x.lastMockScore).to.eql(null); }); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：TC-CS-09/10 已写 SUBJECT_1；SUBJECT_2~4 无记录（若库中已有记录，本条会失败 —— 属数据前置问题，非缺陷）。"
+        },
+        {
+          "name": "TC-CS-15c 学情 · 不返回 design 已排除的 studyProgress",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindId}}",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"★ 每条均不含 studyProgress\", function () { j.data.forEach(function (x) { pm.expect(x).to.not.have.property(\"studyProgress\"); }); });"
+                ]
+              }
+            }
+          ],
+          "description": "该列当前无任何写入方、恒为 0.00，故 VO 刻意不返回（设计文档 §3.1 / Q11）。"
+        },
+        {
+          "name": "TC-CS-14d 越权 · 教练A 查教练B 绑定的学情 → 3102",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/{{bindIdB}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "{{bindIdB}}",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102\", function () { pm.expect(j.code).to.eql(3102); });"
+                ]
+              }
+            }
+          ],
+          "description": "数据影响：无。"
+        },
+        {
+          "name": "TC-CS-15d 学情 · 不存在的 bindId → 3102",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students/999999/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students",
+                "999999",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 3102\", function () { pm.expect(j.code).to.eql(3102); });"
+                ]
+              }
+            }
+          ],
+          "description": "与越权同一响应。"
+        }
+      ]
+    },
+    {
+      "name": "6 · 鉴权（401 / 403）",
+      "item": [
+        {
+          "name": "TC-CS-16a ❌ 鉴权 · 无 token 访问教练接口 → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 真实 HTTP 401（JwtInterceptor 未取到 Bearer）。若 Apifox 项目开了「默认断言：状态码=200」，本条会报**工具假阳性**，见集合描述。"
+        },
+        {
+          "name": "TC-CS-16b ❌ 鉴权 · 学员 token 访问教练接口 → HTTP 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ],
+          "description": "★ 真实 HTTP 403（PathRoleRule：/api/coach/** → COACH）。同为已知工具假阳性点。"
+        },
+        {
+          "name": "TC-CS-16c ❌ 鉴权 · 学员 token 访问 POST 教练接口 → HTTP 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "students"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"student02\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ],
+          "description": "写接口同样被拦截器挡在 Controller 之前。数据影响：无。"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1089 @@
+{
+  "info": {
+    "name": "驾考系统 · 错题本模块回归测试",
+    "description": "错题本模块批量回归测试（对应 doc/test-cases-wrong-book.md 的 TC-WB-01~20）。\n\n【使用步骤】\n1. 后端已启动（默认 http://localhost:8080），已执行 sql/seed-question.sql\n2. ★ 先执行下面的「重置 SQL」，把该学员的错题本清空（否则计数会累积，断言会失败）\n3. 运行整个集合（顺序：准备 → 列表 → 统计 → 重练 → 标记 → 重练作答 → 参数鉴权）\n4. 看通过/失败清单\n\n【重置 SQL】（把 <UID> 换成 student01 的 id）\n  DELETE FROM wrong_book    WHERE user_id = <UID>;\n  DELETE FROM answer_record WHERE user_id = <UID>;\n\n【为什么必须先重置】\n集合里的「准备」会造数据（Q1 错 3 次 → 高频错，Q2 错 1 次 → 待攻克）。\n重复运行会让 wrong_count 不断累加：Q2 错到 3 次就会从「待攻克」变「高频错」，\n导致分类断言失败。\n\n【两个用例需人工验证（不在本集合内）】\n· TC-WB-10 空错题本 retry 返回空数组 —— 需先清空 wrong_book 再单独跑\n· TC-WB-14 普通练习答对不改 mastered —— 需查库确认，见测试文档\n· TC-WB-16 越权（用别人的 token）—— 需第二个账号\n\n【会写库】准备/标记/重练作答 三类请求会改数据，属正常。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "testPassword",
+      "value": ""
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "highFreqIds",
+      "value": "[]"
+    }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备（会写库）",
+      "item": [
+        {
+          "name": "00 · 登录（拿 token）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 token\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"token\", token); } catch (e) {}",
+                  "try { pm.environment.set(\"token\", token); } catch (e) {}",
+                  "try { pm.variables.set(\"token\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01 · 造数据：Q1 答错（第 1 次）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 · 造数据：Q1 答错（第 2 次）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 · 造数据：Q1 答错（第 3 次）→ 成立「高频错」",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 · 造数据：Q2 答错（1 次）→ 「待攻克」",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 2,\n  \"userAnswer\": \"A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 · 造数据：Q3 答错（1 次）→ 稍后用于「已攻克」",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 3,\n  \"userAnswer\": \"B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 · 抓取错题列表并保存 id 变量",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var recs = j.data.records || [];",
+                  "pm.test(\"错题本非空（造数据成功）\", function () { pm.expect(recs.length).to.be.at.least(3); });",
+                  "",
+                  "// 按 questionId 保存 wrong_book.id，供后面 PUT /{id}/mastered 使用",
+                  "recs.forEach(function (r) { pm.collectionVariables.set(\"wbId_\" + r.questionId, String(r.id)); });",
+                  "// 保存「高频错」的 questionId 集合，供验证 retry 优先抽高频错",
+                  "var hf = recs.filter(function (r) { return r.category === \"HIGH_FREQUENCY\"; })",
+                  "              .map(function (r) { return r.questionId; });",
+                  "pm.collectionVariables.set(\"highFreqIds\", JSON.stringify(hf));",
+                  "console.log(\"highFreqIds =\", JSON.stringify(hf));",
+                  "",
+                  "pm.test(\"至少存在 1 条高频错（Q1 应已成立）\", function () { pm.expect(hf.length).to.be.at.least(1); });",
+                  "pm.test(\"每条都带 category 字段\", function () { recs.forEach(function (r) { pm.expect(r).to.have.property(\"category\"); }); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 · 列表",
+      "item": [
+        {
+          "name": "TC-WB-01 列表 · 不传 category（返回全部）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是分页结构\", function () { pm.expect(j.data).to.have.property(\"total\"); });",
+                  "pm.test(\"返回条数 >= 3（造过 3 题）\", function () { pm.expect(j.data.records.length).to.be.at.least(3); });",
+                  "pm.test(\"每条都有 category\", function () { j.data.records.forEach(function (r) { pm.expect(r).to.have.property(\"category\"); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-02 列表 · category=PENDING",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?category=PENDING",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"每条都是 PENDING\", function () { (j.data.records||[]).forEach(function (r) { pm.expect(r.category).to.eql(\"PENDING\"); }); });",
+                  "pm.test(\"至少 1 条（Q2 造过 1 次错）\", function () { pm.expect(j.data.total).to.be.at.least(1); });",
+                  "pm.test(\"PENDING 的 wrongCount 都 < 3\", function () { (j.data.records||[]).forEach(function (r) { pm.expect(r.wrongCount).to.be.below(3); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-03 列表 · category=HIGH_FREQUENCY",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?category=HIGH_FREQUENCY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "HIGH_FREQUENCY"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"每条都是 HIGH_FREQUENCY\", function () { (j.data.records||[]).forEach(function (r) { pm.expect(r.category).to.eql(\"HIGH_FREQUENCY\"); }); });",
+                  "pm.test(\"至少 1 条（Q1 错了 3 次）\", function () { pm.expect(j.data.total).to.be.at.least(1); });",
+                  "pm.test(\"HIGH_FREQUENCY 的 wrongCount 都 >= 3\", function () { (j.data.records||[]).forEach(function (r) { pm.expect(r.wrongCount).to.be.at.least(3); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-04 列表 · category=MASTERED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?category=MASTERED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "MASTERED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"每条都是 MASTERED\", function () { (j.data.records||[]).forEach(function (r) { pm.expect(r.category).to.eql(\"MASTERED\"); }); });",
+                  "pm.test(\"MASTERED 的 mastered 都为 1\", function () { (j.data.records||[]).forEach(function (r) { pm.expect(r.mastered).to.eql(1); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-05 列表 · 分页（pageSize=2）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?pageNum=1&pageSize=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"pageSize = 2\", function () { pm.expect(j.data.pageSize).to.eql(2); });",
+                  "pm.test(\"records 不超过 2 条\", function () { pm.expect(j.data.records.length).to.be.at.most(2); });",
+                  "pm.test(\"pages 与 total 一致\", function () { pm.expect(j.data.pages).to.eql(Math.ceil(j.data.total / 2)); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 · 统计",
+      "item": [
+        {
+          "name": "TC-WB-06 统计 · summary 三类计数 + total",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"含四个字段\", function () { [\"pending\",\"highFrequency\",\"mastered\",\"total\"].forEach(function (k) { pm.expect(j.data).to.have.property(k); }); });",
+                  "pm.test(\"三项之和 == total\", function () {",
+                  "  pm.expect(j.data.pending + j.data.highFrequency + j.data.mastered).to.eql(j.data.total);",
+                  "});",
+                  "pm.test(\"不是 null（空集也应为 0）\", function () {",
+                  "  [\"pending\",\"highFrequency\",\"mastered\",\"total\"].forEach(function (k) { pm.expect(j.data[k]).to.not.be.null; });",
+                  "});",
+                  "pm.test(\"total >= 3\", function () { pm.expect(j.data.total).to.be.at.least(3); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 · 重练抽题",
+      "item": [
+        {
+          "name": "TC-WB-08/11 重练 · 优先高频错 + 防作弊",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book/retry?count=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book",
+                "retry"
+              ],
+              "query": [
+                {
+                  "key": "count",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"返回 1 道\", function () { pm.expect(j.data.length).to.eql(1); });",
+                  "",
+                  "// 抽到的题必须属于「高频错」集合（HT 不够时才补待攻克，此处高频有货）",
+                  "var allowed = JSON.parse(pm.collectionVariables.get(\"highFreqIds\") || \"[]\");",
+                  "pm.test(\"抽中的题来自高频错\", function () {",
+                  "  pm.expect(allowed).to.include(j.data[0].id);",
+                  "});",
+                  "",
+                  "// 防作弊：不返回答案与解析",
+                  "pm.test(\"不含 answer\", function () { pm.expect(j.data[0]).to.not.have.property(\"answer\"); });",
+                  "pm.test(\"不含 analysis\", function () { pm.expect(j.data[0]).to.not.have.property(\"analysis\"); });",
+                  "pm.test(\"选项不含 isCorrect\", function () { (j.data[0].options||[]).forEach(function (o) { pm.expect(o).to.not.have.property(\"isCorrect\"); }); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 · 标记已掌握（会写库）",
+      "item": [
+        {
+          "name": "TC-WB-15 标记已掌握 · PUT /{{wbId_3}}/mastered",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book/{{wbId_3}}/mastered",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book",
+                "{{wbId_3}}",
+                "mastered"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 为 null\", function () { pm.expect(j.data).to.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-15b 复查 · MASTERED 列表应包含 Q3",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?category=MASTERED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "MASTERED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var ids = (j.data.records||[]).map(function (r) { return r.questionId; });",
+                  "pm.test(\"Q3 已进入「已攻克」\", function () { pm.expect(ids).to.include(3); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-17 越权/不存在 · PUT /999999/mastered → 2003",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book/999999/mastered",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book",
+                "999999",
+                "mastered"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 2003\", function () { pm.expect(j.code).to.eql(2003); });",
+                  "pm.test(\"message 为 错题记录不存在\", function () { pm.expect(j.message).to.eql(\"错题记录不存在\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 · 重练作答（会写库）",
+      "item": [
+        {
+          "name": "TC-WB-12 重练答对 · Q2 传正确 B → isCorrect=true",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 2,\n  \"userAnswer\": \"B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book/retry/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book",
+                "retry",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"返回正确答案\", function () { pm.expect(j.data.correctAnswer).to.eql(\"B\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data.analysis).to.not.be.undefined; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-13 重练答错 · Q1 传错误 C → isCorrect=false",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"C\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book/retry/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book",
+                "retry",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 · 参数与鉴权",
+      "item": [
+        {
+          "name": "TC-WB-18 非法枚举 · category=xxx → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?category=xxx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "xxx"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（不是 500）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });",
+                  "pm.test(\"message 含「参数类型不匹配」\", function () { pm.expect(j.message).to.include(\"参数类型不匹配\"); });",
+                  "pm.test(\"message 含参数名 category\", function () { pm.expect(j.message).to.include(\"category\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-19 小写枚举 · category=pending → 1001（大小写敏感）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book?category=pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "pending"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-WB-20 鉴权 · 不带 token → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/wrong-book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "wrong-book"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+# ============================================================
+# 后端主配置【模板】—— application.yml.example
+#
+# 用法：复制为 application.yml 后，按需提供下列环境变量再启动。
+#   cp application.yml.example application.yml
+#   export DB_URL='jdbc:mysql://localhost:3306/driving_exam?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true'
+#   export DB_USERNAME='root'
+#   export DB_PASSWORD='<本机数据库口令>'
+#   export DEEPSEEK_API_KEY='<DeepSeek API Key>'
+#   export JWT_SECRET='<随机长字符串>'
+#
+# 安全约定：
+#   - 本文件**不含任何真实凭据**；下方 5 个敏感项均为【无默认值】环境变量占位符。
+#   - 真正的 application.yml 已被 .gitignore 排除，请勿提交。
+# ============================================================
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: driving-exam-server
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 数据库连接：全部改为无默认值环境变量（缺失即启动失败，绝不回退真实口令）
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jackson:
+    # 时间格式不在此配置：LocalDateTime 的序列化/反序列化统一由 JacksonConfig 控制
+    # data 为 null 时保留字段（不剔除）
+    default-property-inclusion: always
+
+mybatis-plus:
+  # Mapper XML 位置
+  mapper-locations: classpath*:mapper/**/*.xml
+  # 实体所在包（已迁至 pojo 模块）
+  type-aliases-package: com.driving.exam.pojo.entity
+  configuration:
+    # 下划线转驼峰
+    map-underscore-to-camel-case: true
+    # 开发期打印 SQL，上线可去掉
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      # 逻辑删除仅用于 5 张主数据表，由实体 @TableLogic 显式声明，此处不全局开启
+
+# 大语言模型（DeepSeek）
+# 说明：model 用官方通用别名 deepseek-chat（实测返回的 model 为 deepseek-flash，
+#      是服务端路由后的实际模型；别名将来升级无需改配置）
+deepseek:
+  # API Key 改为无默认值环境变量（原文件曾带 ${DEEPSEEK_API_KEY:} 空默认，此处同样不留真实值）
+  api-key: ${DEEPSEEK_API_KEY}
+  base-url: https://api.deepseek.com
+  model: deepseek-chat
+  temperature: 1.0
+  top-p: 1.0
+  # 建连超时（毫秒）
+  connect-timeout: 5000
+  # 读超时（毫秒）：非流式请求下，服务端在模型生成期间不返回任何字节，
+  # 该值需覆盖"整段生成时间"，故放宽到 60s
+  read-timeout: 60000
+
+# JWT —— 用户模块启用
+jwt:
+  # 密钥改为无默认值环境变量（原文件曾带示例默认值，此处不留任何默认）
+  secret: ${JWT_SECRET}
+  expire-seconds: 86400
+
+logging:
+  level:
+    com.driving.exam: debug

@@ -1,0 +1,23 @@
+# =====================================================================
+# 集成测试专用配置（★仅 test 作用域：src/test/resources，**不会打进应用包**）
+# 仅当 @ActiveProfiles("test") 时加载，用于强制集成测试连接【独立测试库】。
+#
+# ★ 安全要点（缺一即“快速失败”，绝不回退到主配置 / 正式库）：
+#   1) 下方三个占位符 **无默认值**——未设置对应环境变量时，Spring 解析占位符失败、
+#      应用上下文启动即失败（fail-fast），**不会**静默回退到主 application.yml 的 root@driving_exam。
+#   2) 本文件覆盖主 application.yml 的 spring.datasource.*（profile 配置优先级更高）。
+#   3) URL 指向独立测试库 driving_exam_test；账号为测试专用 drv_test（**非 root**）。
+#   4) 实际连接目标由测试守卫 DbConnectionGuardTest 用 SELECT DATABASE() / CURRENT_USER() 复核。
+#
+# 运行前需在本机**以环境变量**提供（示例，勿把真实值写入仓库）：
+#   TEST_DB_URL      = jdbc:mysql://localhost:3306/driving_exam_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+#   TEST_DB_USER     = drv_test
+#   TEST_DB_PASSWORD = <测试库口令，仅置于本机环境变量>
+# =====================================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${TEST_DB_URL}
+    username: ${TEST_DB_USER}
+    password: ${TEST_DB_PASSWORD}

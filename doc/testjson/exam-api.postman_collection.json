@@ -1,0 +1,774 @@
+{
+  "info": {
+    "name": "驾考系统 · 模拟考试模块回归测试",
+    "description": "模拟考试模块回归测试（Day 17）。对应 doc/api-design.md §4.5、doc/exam-design.md。\n\n【⚠️ 跑前必须先执行「清库 SQL」】\n  DELETE FROM mock_exam_answer;\n  DELETE FROM mock_exam;\n  DELETE FROM answer_record WHERE source='EXAM';\n  DELETE FROM wrong_book WHERE user_id=(SELECT id FROM sys_user WHERE username='student01');\n（不清理会导致「重复开卷」「历史条数」等断言失败。）\n\n【★ 本集合真实写库】\n一次完整运行会新增 1 次考试记录（mock_exam）+ 10 条 answer_record(source=EXAM) + 若干错题。\n失败后要重跑，请**先再执行一次清库 SQL**。\n\n【★ 黄金标准 ③】\n本集合前 10 题「对 7 错 3」，每题 1 分 → 交卷后 score 应【恰好 = 7】。\n这是人工预知的期望值，用来证明「读库重算」真的算对（而非 mock_exam.score 与 report.score 一起错）。\n\n【★ Q6 的全角坑（有意设计，勿改）】\nquestion 表里 Q6 的标准答案存的是**全角 Ａ**；本集合组 3 对 Q6 提交的是**半角 A**。\n若判对，说明 AnswerGrader 的 NFKC 归一化生效。**这条是归一化的活体测试，改数据前请三思。**\n\n【数据基线】\n试卷 id=1（sql/seed-exam-paper.sql）：36 题 / 20 分钟 / 总分 36 / 及格 32。\n若试卷参数变化，本集合里的计数断言需同步更新。\n\n【★ 唯一真源：本文件】\n改了本 .json 后必须**重新导入 Apifox**，否则 Apifox 里跑的是旧副本。\n\n【前置】\n后端已启动；已执行 sql/seed-question.sql + seed-question-extra.sql（36 题）+ sql/seed-exam-paper.sql。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "testPassword", "value": "" },
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "paperId", "value": "1" },
+    { "key": "examId", "value": "" },
+    { "key": "examScore", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备",
+      "item": [
+        {
+          "name": "00 · 登录（拿 token）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 token\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"token\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 · 试卷列表",
+      "item": [
+        {
+          "name": "TC-EX-01 试卷列表 · 返回演示卷且参数正确",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/papers?subjectCode=SUBJECT_1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "papers"],
+              "query": [{ "key": "subjectCode", "value": "SUBJECT_1" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "var paper = j.data[0];",
+                  "pm.test(\"第一份试卷 id = 1\", function () { pm.expect(paper.id).to.eql(1); });",
+                  "pm.test(\"questionCount = 36\", function () { pm.expect(paper.questionCount).to.eql(36); });",
+                  "pm.test(\"totalScore = 36\", function () { pm.expect(paper.totalScore).to.eql(36); });",
+                  "pm.test(\"passScore = 32\", function () { pm.expect(paper.passScore).to.eql(32); });",
+                  "pm.test(\"duration = 20（分钟）\", function () { pm.expect(paper.duration).to.eql(20); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已清库、已登录。预期：1 份演示卷，参数 36 题/20 分钟/36 分/32 及格，ongoingExamId=null。"
+        }
+      ]
+    },
+    {
+      "name": "2 · 开始考试",
+      "item": [
+        {
+          "name": "TC-EX-02 开始考试 · 新建一场（提取 examId）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paperId\": {{paperId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "start"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var d = j.data;",
+                  "pm.test(\"examId 非空\", function () { pm.expect(d.examId).to.be.a(\"number\"); });",
+                  "pm.test(\"status = ONGOING\", function () { pm.expect(d.status).to.eql(\"ONGOING\"); });",
+                  "pm.test(\"remainingSeconds 在 1180~1200 秒之间\", function () { pm.expect(d.remainingSeconds).to.be.within(1180, 1200); });",
+                  "pm.test(\"questions 长度 = 36\", function () { pm.expect(d.questions.length).to.eql(36); });",
+                  "pm.test(\"题目不泄露 answer\", function () { pm.expect(d.questions[0]).to.not.have.property(\"answer\"); });",
+                  "pm.test(\"已答记录为空对象\", function () { pm.expect(Object.keys(d.answeredMap || {})).to.have.lengthOf(0); });",
+                  "try { pm.collectionVariables.set(\"examId\", String(d.examId)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已清库（无进行中考试）。预期：新建一场，status=ONGOING，36 题，剩余约 1200 秒；examId 存入变量。"
+        },
+        {
+          "name": "TC-EX-02b 试卷列表 · ongoingExamId 应指向刚开的那场（★须在交卷前执行）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/papers?subjectCode=SUBJECT_1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "papers"],
+              "query": [{ "key": "subjectCode", "value": "SUBJECT_1" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var examId = Number(pm.collectionVariables.get(\"examId\"));",
+                  "pm.test(\"ongoingExamId = 刚开的这场 examId\", function () { pm.expect(j.data[0].ongoingExamId).to.eql(examId); });"
+                ]
+              }
+            }
+          ],
+          "description": "开考后再查试卷列表，ongoingExamId 应指向刚那场——比『清库后为 null』更稳健（不强依赖库的初始状态），也更直接地验证了该字段的功能。\n⚠️ 本用例依赖执行顺序：必须在 TC-EX-04 交卷【之前】运行（交卷后该考试已非 ONGOING，ongoingExamId 必为 null）。\n若它跑在交卷之后而失败，属于 Apifox 导入时把新用例追加到了末尾——请删除 Apifox 里的旧集合后重新导入，以恢复本文件中的顺序。"
+        }
+      ]
+    },
+    {
+      "name": "3 · 答题（10 题：对 7 错 3）",
+      "description": "Q1~Q7 提交正确答案；Q8~Q10 提交故意错误的答案。每题 1 分 → 交卷预期 7 分。\n★ Q6 标准答案库里存的是全角 Ａ，这里提交半角 A，用于验证 NFKC 归一化。",
+      "item": [
+        {
+          "name": "TC-EX-03a 答题 Q1（单选，正确答案 A）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03b 答题 Q2（单选，正确答案 B）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 2,\n  \"userAnswer\": \"B\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03c 答题 Q3（单选，正确答案 A）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 3,\n  \"userAnswer\": \"A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03d 答题 Q4（单选，正确答案 B）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 4,\n  \"userAnswer\": \"B\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03e 答题 Q5（单选，正确答案 A）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 5,\n  \"userAnswer\": \"A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03f 答题 Q6（单选，库里存全角 Ａ；提交半角 A 验证 NFKC）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 6,\n  \"userAnswer\": \"A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03g 答题 Q7（单选，正确答案 B）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 7,\n  \"userAnswer\": \"B\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03h 答题 Q8（多选，正确答案 AB；故意答 C → 错）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 8,\n  \"userAnswer\": \"C\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03i 答题 Q9（多选，正确答案 A,B；故意答 A → 错）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 9,\n  \"userAnswer\": \"A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03j 答题 Q10（多选，正确答案 ABD；故意答 A → 错）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 10,\n  \"userAnswer\": \"A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/answer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "answer"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-EX-03k 断点续考 · GET /{examId} 已答应恢复（10 条）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"status = ONGOING\", function () { pm.expect(j.data.status).to.eql(\"ONGOING\"); });",
+                  "pm.test(\"remainingSeconds >= 0\", function () { pm.expect(j.data.remainingSeconds).to.be.at.least(0); });",
+                  "pm.test(\"answeredMap 有 10 条已答\", function () { pm.expect(Object.keys(j.data.answeredMap || {})).to.have.lengthOf(10); });",
+                  "pm.test(\"answeredMap 含 Q1 与 Q8\", function () { pm.expect(j.data.answeredMap).to.have.property(\"1\"); pm.expect(j.data.answeredMap).to.have.property(\"8\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "断点续考验证：答 10 题后重新拉取，answeredMap 应含这 10 题（key 为字符串化的 questionId）。"
+        }
+      ]
+    },
+    {
+      "name": "4 · 交卷（黄金标准）",
+      "item": [
+        {
+          "name": "TC-EX-04 交卷 · score 应恰好 = 7（对 7 错 3，每题 1 分）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "submit"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var d = j.data;",
+                  "pm.test(\"★ score = 7（黄金标准：对 7 题 × 1 分）\", function () { pm.expect(d.score).to.eql(7); });",
+                  "pm.test(\"totalScore = 36\", function () { pm.expect(d.totalScore).to.eql(36); });",
+                  "pm.test(\"passScore = 32\", function () { pm.expect(d.passScore).to.eql(32); });",
+                  "pm.test(\"isPass = false（7 < 32）\", function () { pm.expect(d.isPass).to.eql(false); });",
+                  "pm.test(\"correctCount = 7\", function () { pm.expect(d.correctCount).to.eql(7); });",
+                  "pm.test(\"wrongCount = 3\", function () { pm.expect(d.wrongCount).to.eql(3); });",
+                  "pm.test(\"unansweredCount = 26\", function () { pm.expect(d.unansweredCount).to.eql(26); });",
+                  "pm.test(\"items 长度 = 36（以试卷为主线）\", function () { pm.expect(d.items.length).to.eql(36); });",
+                  "pm.test(\"items 中 userAnswer=null 的有 26 条（未作答）\", function () { pm.expect(d.items.filter(function (x) { return x.userAnswer === null; }).length).to.eql(26); });",
+                  "pm.test(\"items 中 isCorrect=true 的有 7 条\", function () { pm.expect(d.items.filter(function (x) { return x.isCorrect === true; }).length).to.eql(7); });",
+                  "try { pm.collectionVariables.set(\"examScore\", String(d.score)); } catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "description": "★ 黄金标准：提交 {} （从草稿读答案）→ score 应恰好 = 7。items 以试卷为主线共 36 条。"
+        }
+      ]
+    },
+    {
+      "name": "5 · 报告",
+      "item": [
+        {
+          "name": "TC-EX-05 成绩报告 · score 一致 + 逐题结果正确",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "report"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var d = j.data;",
+                  "pm.test(\"report.score = 7（与交卷一致）\", function () { pm.expect(d.score).to.eql(7); });",
+                  "pm.test(\"① report.score == 交卷时的 score（collectionVariables.examScore）\", function () { pm.expect(d.score).to.eql(Number(pm.collectionVariables.get(\"examScore\"))); });",
+                  "pm.test(\"② report.score == 答对题数（每题 1 分，故 Σscore == correctCount）\", function () { pm.expect(d.score).to.eql(d.correctCount); });",
+                  "pm.test(\"items 长度 = 36\", function () { pm.expect(d.items.length).to.eql(36); });",
+                  "pm.test(\"isCorrect=true 共 7 条\", function () { pm.expect(d.items.filter(function (x) { return x.isCorrect === true; }).length).to.eql(7); });",
+                  "pm.test(\"isCorrect=false 共 29 条\", function () { pm.expect(d.items.filter(function (x) { return x.isCorrect === false; }).length).to.eql(29); });",
+                  "pm.test(\"未作答（userAnswer=null）共 26 条且 isCorrect=false\", function () { var u = d.items.filter(function (x) { return x.userAnswer === null; }); pm.expect(u.length).to.eql(26); u.forEach(function (x) { pm.expect(x.isCorrect).to.eql(false); }); });",
+                  "pm.test(\"报告含正确答案与解析（items[0]）\", function () { pm.expect(d.items[0]).to.have.property(\"correctAnswer\"); pm.expect(d.items[0]).to.have.property(\"analysis\"); });",
+                  "pm.test(\"报告含选项列表（items[0].options 非空）\", function () { pm.expect(d.items[0].options.length).to.be.at.least(1); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已完成交卷。预期：score=7、items=36、7 对 / 29 错（其中 26 条未作答）。"
+        }
+      ]
+    },
+    {
+      "name": "6 · 历史",
+      "item": [
+        {
+          "name": "TC-EX-06 考试历史 · 含刚才这次，score=7",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/history?subjectCode=SUBJECT_1&pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "history"],
+              "query": [
+                { "key": "subjectCode", "value": "SUBJECT_1" },
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"records 非空\", function () { pm.expect(j.data.records.length).to.be.at.least(1); });",
+                  "pm.test(\"第一条 score = 7\", function () { pm.expect(j.data.records[0].score).to.eql(7); });",
+                  "pm.test(\"第一条带试卷标题\", function () { pm.expect(j.data.records[0].paperTitle).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已完成交卷。预期：历史列表含刚结束的这场考试，score=7。"
+        }
+      ]
+    },
+    {
+      "name": "7 · 边界与鉴权",
+      "item": [
+        {
+          "name": "TC-EX-07 幂等交卷 · 再次 submit 仍返回 score=7",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/{{examId}}/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "{{examId}}", "submit"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（幂等，不报错）\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"score 仍 = 7（返回同一报告）\", function () { pm.expect(j.data.score).to.eql(7); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已交卷。预期：幂等返回同一报告，score 仍为 7、不产生第二场考试。"
+        },
+        {
+          "name": "TC-EX-08 参数校验 · start 无 Body → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "start"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200，不是 500）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001（请求体缺失）\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录。预期：缺 body → 1001（不是 500），验证 HttpMessageNotReadableException 处理器。"
+        },
+        {
+          "name": "TC-EX-09 鉴权 · 无 token 访问 → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/exam/papers?subjectCode=SUBJECT_1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "exam", "papers"],
+              "query": [{ "key": "subjectCode", "value": "SUBJECT_1" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：无。预期：无 token → 真实 HTTP 401。"
+        }
+      ]
+    }
+  ]
+}

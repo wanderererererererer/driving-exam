@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 继承 Spring Boot 官方父工程，统一管理 Spring 生态依赖与插件版本 -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.driving</groupId>
+    <artifactId>driving-exam</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>driving-exam</name>
+    <description>基于大语言模型的驾考智能辅导系统 - 父工程（聚合）</description>
+
+    <!-- 聚合的三个子模块 -->
+    <modules>
+        <module>driving-exam-common</module>
+        <module>driving-exam-pojo</module>
+        <module>driving-exam-server</module>
+    </modules>
+
+    <properties>
+        <java.version>17</java.version>
+        <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <jjwt.version>0.12.5</jjwt.version>
+    </properties>
+
+    <!-- 统一依赖版本管理；子模块引入时无需再写 version -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- ========== 内部模块 ========== -->
+            <dependency>
+                <groupId>com.driving</groupId>
+                <artifactId>driving-exam-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.driving</groupId>
+                <artifactId>driving-exam-pojo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- ========== MyBatis-Plus（Spring Boot 3 专用 starter） ========== -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+
+            <!-- ========== JWT ========== -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!--
+      注意：spring-boot-maven-plugin 只在 driving-exam-server 中声明，
+      父工程不声明，避免 common / pojo 被打成可执行 jar。
+    -->
+</project>

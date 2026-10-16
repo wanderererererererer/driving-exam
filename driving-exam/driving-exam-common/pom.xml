@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.driving</groupId>
+        <artifactId>driving-exam</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>driving-exam-common</artifactId>
+    <name>driving-exam-common</name>
+    <description>通用模块：统一返回结构、异常体系（包 com.driving.exam.common）</description>
+
+    <dependencies>
+        <!-- GlobalExceptionHandler 需要 Spring MVC / servlet API -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- PageResult 依赖 MyBatis-Plus 的 IPage -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>

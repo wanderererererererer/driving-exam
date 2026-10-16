@@ -1,0 +1,600 @@
+{
+  "info": {
+    "name": "驾考系统 · AI 问答模块回归测试",
+    "description": "AI 问答模块批量回归测试（会话版）。\n\n【覆盖】提问 chat / 会话列表 sessions / 会话消息 sessions/{id} / 删除会话 deleteSession / 4003 限额 / 4004 会话不存在。\n\n【使用步骤】\n1. 后端已启动（默认 http://localhost:8080），且已设置环境变量 DEEPSEEK_API_KEY。\n2. 按顺序运行整个集合：\n   0 · 准备（登录拿 token）\n   1 · 提问（真实调用 DeepSeek，会写库）\n   2 · 会话列表\n   3 · 会话消息\n   4 · 删除会话（会写库）\n   5 · 参数与鉴权\n   6 · 限额（需前置，单独跑）\n3. 看通过/失败清单。\n\n【重要说明】\n· 第 1 组会**真实调用 DeepSeek**（每次运行约 3 次调用，耗时数秒、消耗额度）。\n· 每次运行会**生成一个新的随机 sessionId**（前置脚本），因此本集合可重复运行而不会与旧数据混淆；断言只针对“本次生成的会话”，不假设库中共有几个会话。\n· 集合**不清理**自己造的数据（会留一个已删除的会话痕迹），不影响重复运行。\n\n【第 6 组「限额」的额外前置（必须单独跑）】\n4003 只在“当日调用次数 >= 每日上限(20)”时触发，正常跑一次集合达不到。做法二选一：\n  A) 把 AiChatServiceImpl.DAILY_QUOTA 临时改为 0，重启后端 → 运行本组请求 → 应得 4003 → 改回 20 并重启。\n  B) 用 SQL 预置 20 条“今天”的记录（把 <UID> 换成 student01 的 id）：\n     INSERT INTO ai_chat_record (user_id, session_id, subject_code, question, answer, model, prompt_tokens, completion_tokens, create_time)\n     SELECT <UID>, 'quota-preload', 'SUBJECT_1', 'q', 'a', 'deepseek-chat', 0, 0, NOW() FROM ai_chat_record LIMIT 20;\n  ⚠️ 用 A 方案时，先跑完第 1~5 组再改，否则前面所有 chat 都会返回 4003。\n\n【需人工验证（不在本集合内）】\n· 越权：用另一个学员的 token 访问某 sessionId → 应返回空数组 / 4004（需第二个账号）。\n· 打字机效果、会话切换后的追加提问：属前端交互，见 Day13 联调走查清单。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "testPassword", "value": "" },
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "recordId1", "value": "" },
+    { "key": "longQuestion", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备（会写库）",
+      "item": [
+        {
+          "name": "00 · 登录（拿 token）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 token\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"token\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 · 提问（真实调用 DeepSeek，会写库）",
+      "description": "三次提问共用同一个随机 sessionId（由 01 的前置脚本生成），构成一个含 3 轮的会话。",
+      "item": [
+        {
+          "name": "01 · 提问①（生成新会话）",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 每次运行生成新的随机 sessionId，保证可重复运行",
+                  "var sid = \"pm-\" + Date.now() + \"-\" + Math.random().toString(36).slice(2, 8);",
+                  "pm.collectionVariables.set(\"sessionId\", sid);",
+                  "console.log(\"本次 sessionId =\", sid);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"有回答正文\", function () { pm.expect(j.data.answer).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"recordId 是数字\", function () { pm.expect(j.data.recordId).to.be.a(\"number\"); });",
+                  "pm.test(\"返回实际 model\", function () { pm.expect(j.data.model).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"有 createTime\", function () { pm.expect(j.data.createTime).to.be.a(\"string\").and.not.empty; });",
+                  "pm.collectionVariables.set(\"recordId1\", String(j.data.recordId));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"科目一考试一共有多少道题？\",\n  \"subjectCode\": \"SUBJECT_1\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "chat"]
+            }
+          }
+        },
+        {
+          "name": "02 · 提问②（同一会话）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"驾驶证记分周期是多久？\",\n  \"subjectCode\": \"SUBJECT_1\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "chat"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"有回答正文\", function () { pm.expect(j.data.answer).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 · 提问③（同一会话）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"闯红灯一次扣几分？\",\n  \"subjectCode\": \"SUBJECT_1\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "chat"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"有回答正文\", function () { pm.expect(j.data.answer).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 · 会话列表",
+      "item": [
+        {
+          "name": "TC-AI-04 会话列表包含本会话（3 轮）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions?pageNum=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是分页结构\", function () { pm.expect(j.data).to.have.property(\"total\"); });",
+                  "var sid = pm.collectionVariables.get(\"sessionId\");",
+                  "var found = (j.data.records || []).filter(function (s) { return s.sessionId === sid; });",
+                  "pm.test(\"列表包含本次会话\", function () { pm.expect(found.length).to.eql(1); });",
+                  "pm.test(\"messageCount = 3\", function () { pm.expect(found[0].messageCount).to.eql(3); });",
+                  "pm.test(\"firstQuestion 为第 1 问\", function () { pm.expect(found[0].firstQuestion).to.include(\"科目一考试\"); });",
+                  "pm.test(\"含 lastTime\", function () { pm.expect(found[0].lastTime).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AI-05 会话列表分页（pageSize=1）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions?pageNum=1&pageSize=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "1" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"pageSize = 1\", function () { pm.expect(j.data.pageSize).to.eql(1); });",
+                  "pm.test(\"records 不超过 1 条\", function () { pm.expect((j.data.records || []).length).to.be.at.most(1); });",
+                  "pm.test(\"pages 与 total 一致\", function () { pm.expect(j.data.pages).to.eql(Math.ceil(j.data.total / 1)); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 · 会话消息",
+      "item": [
+        {
+          "name": "TC-AI-06 拉取本会话消息（3 条，升序）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions", "{{sessionId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "pm.test(\"共 3 条\", function () { pm.expect(j.data.length).to.eql(3); });",
+                  "pm.test(\"每条都有 question/answer\", function () { j.data.forEach(function (r) { pm.expect(r).to.have.property(\"question\"); pm.expect(r).to.have.property(\"answer\"); }); });",
+                  "pm.test(\"按时间升序\", function () {",
+                  "  for (var i = 1; i < j.data.length; i++) {",
+                  "    pm.expect(j.data[i - 1].createTime <= j.data[i].createTime).to.eql(true);",
+                  "  }",
+                  "});",
+                  "pm.test(\"首条为第 1 问\", function () { pm.expect(j.data[0].question).to.include(\"科目一考试\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AI-07 不存在的会话 → 空数组",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions/not-exist-session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions", "not-exist-session"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"返回空数组（不报错、不泄露）\", function () { pm.expect(j.data).to.be.an(\"array\").and.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 · 删除会话（会写库）",
+      "item": [
+        {
+          "name": "TC-AI-09 删除本会话",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions", "{{sessionId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 为 null\", function () { pm.expect(j.data).to.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AI-10 复查：会话列表不再含本会话",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions?pageNum=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var sid = pm.collectionVariables.get(\"sessionId\");",
+                  "var found = (j.data.records || []).filter(function (s) { return s.sessionId === sid; });",
+                  "pm.test(\"已不在列表中\", function () { pm.expect(found.length).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AI-11 删除不存在的会话 → 4004",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions/not-exist-session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions", "not-exist-session"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 4004\", function () { pm.expect(j.code).to.eql(4004); });",
+                  "pm.test(\"message 为 AI 问答记录不存在\", function () { pm.expect(j.message).to.eql(\"AI 问答记录不存在\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AI-12 复查：该会话消息为空",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions", "{{sessionId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"消息已清空\", function () { pm.expect(j.data).to.be.an(\"array\").and.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 · 参数与鉴权",
+      "item": [
+        {
+          "name": "TC-AI-13 空 question → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "chat"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（校验失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-AI-14 question 超 500 字 → 1001",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"longQuestion\", new Array(502).join(\"a\")); // 501 个 a"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });",
+                  "pm.test(\"message 含「500」\", function () { pm.expect(j.message).to.include(\"500\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{longQuestion}}\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "chat"]
+            }
+          }
+        },
+        {
+          "name": "TC-AI-15 鉴权 · 不带 token → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/sessions?pageNum=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "sessions"],
+              "query": [
+                { "key": "pageNum", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 · 限额（需前置，单独跑）",
+      "description": "4003 只在当日调用次数 >= 每日上限(20) 时触发。运行前请按集合说明把 DAILY_QUOTA 临时改为 0（或预置 20 条今日记录），运行后立即恢复。",
+      "item": [
+        {
+          "name": "TC-AI-16 限额触发 → 4003",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"限额测试\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/ai/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "ai", "chat"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 4003\", function () { pm.expect(j.code).to.eql(4003); });",
+                  "pm.test(\"message 为 AI 调用次数超限\", function () { pm.expect(j.message).to.eql(\"AI 调用次数超限\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

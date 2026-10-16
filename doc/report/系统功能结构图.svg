@@ -1,0 +1,478 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="504.36pt" height="756.36pt" viewBox="0 0 504.36 756.36">
+<rect width="504.36" height="756.36" fill="white"/>
+<g transform="translate(8.64,8.64)">
+<g id="ov_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 107)">
+<title>OV</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-107 483,-107 483,4 -4,4"/>
+<!-- ROOT -->
+<g id="ov_node1" class="node">
+<title>ROOT</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.9" points="376,-103 91,-103 91,-66 376,-66 376,-103"/>
+<text text-anchor="middle" x="233.5" y="-81" font-family="Noto Sans CJK SC" font-size="15.00">基于大语言模型的驾考智能辅导系统</text>
+</g>
+<!-- M1 -->
+<g id="ov_node2" class="node">
+<title>M1</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.3" points="67,-36 0,-36 0,0 67,0 67,-36"/>
+<text text-anchor="middle" x="33.5" y="-14.9" font-family="Noto Sans CJK SC" font-size="12.00">用户认证</text>
+</g>
+<!-- ROOT&#45;&gt;M1 -->
+<g id="ov_edge1" class="edge">
+<title>ROOT&#45;&gt;M1</title>
+<path fill="none" stroke="#37474f" stroke-width="1.2" d="M90.81,-84C58.49,-84 33.5,-84 33.5,-84 33.5,-84 33.5,-42.03 33.5,-42.03"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.2" points="35.6,-42.03 33.5,-36.03 31.4,-42.03 35.6,-42.03"/>
+</g>
+<!-- M2 -->
+<g id="ov_node3" class="node">
+<title>M2</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.3" points="147,-36 80,-36 80,0 147,0 147,-36"/>
+<text text-anchor="middle" x="113.5" y="-14.9" font-family="Noto Sans CJK SC" font-size="12.00">学员学习</text>
+</g>
+<!-- ROOT&#45;&gt;M2 -->
+<g id="ov_edge2" class="edge">
+<title>ROOT&#45;&gt;M2</title>
+<path fill="none" stroke="#37474f" stroke-width="1.2" d="M119,-65.98C119,-65.98 119,-42.42 119,-42.42"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.2" points="121.1,-42.42 119,-36.42 116.9,-42.42 121.1,-42.42"/>
+</g>
+<!-- M3 -->
+<g id="ov_node4" class="node">
+<title>M3</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.3" points="227,-36 160,-36 160,0 227,0 227,-36"/>
+<text text-anchor="middle" x="193.5" y="-14.9" font-family="Noto Sans CJK SC" font-size="12.00">智能问答</text>
+</g>
+<!-- ROOT&#45;&gt;M3 -->
+<g id="ov_edge3" class="edge">
+<title>ROOT&#45;&gt;M3</title>
+<path fill="none" stroke="#37474f" stroke-width="1.2" d="M193.5,-65.98C193.5,-65.98 193.5,-42.42 193.5,-42.42"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.2" points="195.6,-42.42 193.5,-36.42 191.4,-42.42 195.6,-42.42"/>
+</g>
+<!-- M4 -->
+<g id="ov_node5" class="node">
+<title>M4</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.3" points="307,-36 240,-36 240,0 307,0 307,-36"/>
+<text text-anchor="middle" x="273.5" y="-14.9" font-family="Noto Sans CJK SC" font-size="12.00">预约管理</text>
+</g>
+<!-- ROOT&#45;&gt;M4 -->
+<g id="ov_edge4" class="edge">
+<title>ROOT&#45;&gt;M4</title>
+<path fill="none" stroke="#37474f" stroke-width="1.2" d="M273.5,-65.98C273.5,-65.98 273.5,-42.42 273.5,-42.42"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.2" points="275.6,-42.42 273.5,-36.42 271.4,-42.42 275.6,-42.42"/>
+</g>
+<!-- M5 -->
+<g id="ov_node6" class="node">
+<title>M5</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.3" points="387,-36 320,-36 320,0 387,0 387,-36"/>
+<text text-anchor="middle" x="353.5" y="-14.9" font-family="Noto Sans CJK SC" font-size="12.00">教练管理</text>
+</g>
+<!-- ROOT&#45;&gt;M5 -->
+<g id="ov_edge5" class="edge">
+<title>ROOT&#45;&gt;M5</title>
+<path fill="none" stroke="#37474f" stroke-width="1.2" d="M348,-65.98C348,-65.98 348,-42.42 348,-42.42"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.2" points="350.1,-42.42 348,-36.42 345.9,-42.42 350.1,-42.42"/>
+</g>
+<!-- M6 -->
+<g id="ov_node7" class="node">
+<title>M6</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.3" points="479,-36 400,-36 400,0 479,0 479,-36"/>
+<text text-anchor="middle" x="439.5" y="-14.9" font-family="Noto Sans CJK SC" font-size="12.00">管理员管理</text>
+</g>
+<!-- ROOT&#45;&gt;M6 -->
+<g id="ov_edge6" class="edge">
+<title>ROOT&#45;&gt;M6</title>
+<path fill="none" stroke="#37474f" stroke-width="1.2" d="M376.01,-84C411.43,-84 439.5,-84 439.5,-84 439.5,-84 439.5,-42.03 439.5,-42.03"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.2" points="441.6,-42.03 439.5,-36.03 437.4,-42.03 441.6,-42.03"/>
+</g>
+</g>
+</g>
+<g transform="translate(47.06,138.28)">
+<g id="t0_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 150)">
+<title>T</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-150 160,-150 160,4 -4,4"/>
+<!-- H -->
+<g id="t0_node1" class="node">
+<title>H</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.7" points="136.5,-146 67.5,-146 67.5,-110 136.5,-110 136.5,-146"/>
+<text text-anchor="middle" x="102" y="-124.9" font-family="Noto Sans CJK SC" font-size="12.00">用户认证</text>
+</g>
+<!-- N00 -->
+<g id="t0_node2" class="node">
+<title>N00</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="54,-91 0,-91 0,-55 54,-55 54,-91"/>
+<text text-anchor="middle" x="27" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">登录系统</text>
+</g>
+<!-- H&#45;&gt;N00 -->
+<g id="t0_edge1" class="edge">
+<title>H&#45;&gt;N00</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M67.13,-128C47.55,-128 27,-128 27,-128 27,-128 27,-97.01 27,-97.01"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="29.1,-97.01 27,-91.01 24.9,-97.01 29.1,-97.01"/>
+</g>
+<!-- N01 -->
+<g id="t0_node3" class="node">
+<title>N01</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="112,-91 58,-91 58,-55 112,-55 112,-91"/>
+<text text-anchor="middle" x="85" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">管理资料</text>
+</g>
+<!-- H&#45;&gt;N01 -->
+<g id="t0_edge2" class="edge">
+<title>H&#45;&gt;N01</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M89.75,-109.99C89.75,-109.99 89.75,-97.24 89.75,-97.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="91.85,-97.24 89.75,-91.24 87.65,-97.24 91.85,-97.24"/>
+</g>
+<!-- N10 -->
+<g id="t0_node4" class="node">
+<title>N10</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="76,-36 22,-36 22,0 76,0 76,-36"/>
+<text text-anchor="middle" x="49" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">修改密码</text>
+</g>
+<!-- H&#45;&gt;N10 -->
+<g id="t0_edge3" class="edge">
+<title>H&#45;&gt;N10</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M120.17,-109.99C120.17,-85.58 120.17,-45 120.17,-45 120.17,-45 67,-45 67,-45 67,-45 67,-42.16 67,-42.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="69.1,-42.16 67,-36.16 64.9,-42.16 69.1,-42.16"/>
+</g>
+<!-- N11 -->
+<g id="t0_node5" class="node">
+<title>N11</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="156,-36 102,-36 102,0 156,0 156,-36"/>
+<text text-anchor="middle" x="129" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">退出登录</text>
+</g>
+<!-- H&#45;&gt;N11 -->
+<g id="t0_edge4" class="edge">
+<title>H&#45;&gt;N11</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M128.33,-109.84C128.33,-109.84 128.33,-42.19 128.33,-42.19"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="130.43,-42.19 128.33,-36.19 126.23,-42.19 130.43,-42.19"/>
+</g>
+<!-- N00&#45;&gt;N10 -->
+</g>
+</g>
+<g transform="translate(267.38,138.28)">
+<g id="t1_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 150)">
+<title>T</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-150 160,-150 160,4 -4,4"/>
+<!-- H -->
+<g id="t1_node1" class="node">
+<title>H</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.7" points="136.5,-146 67.5,-146 67.5,-110 136.5,-110 136.5,-146"/>
+<text text-anchor="middle" x="102" y="-124.9" font-family="Noto Sans CJK SC" font-size="12.00">学员学习</text>
+</g>
+<!-- N00 -->
+<g id="t1_node2" class="node">
+<title>N00</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="54,-91 0,-91 0,-55 54,-55 54,-91"/>
+<text text-anchor="middle" x="27" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">练习题库</text>
+</g>
+<!-- H&#45;&gt;N00 -->
+<g id="t1_edge1" class="edge">
+<title>H&#45;&gt;N00</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M67.13,-128C47.55,-128 27,-128 27,-128 27,-128 27,-97.01 27,-97.01"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="29.1,-97.01 27,-91.01 24.9,-97.01 29.1,-97.01"/>
+</g>
+<!-- N01 -->
+<g id="t1_node3" class="node">
+<title>N01</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="112,-91 58,-91 58,-55 112,-55 112,-91"/>
+<text text-anchor="middle" x="85" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">管理错题</text>
+</g>
+<!-- H&#45;&gt;N01 -->
+<g id="t1_edge2" class="edge">
+<title>H&#45;&gt;N01</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M89.75,-109.99C89.75,-109.99 89.75,-97.24 89.75,-97.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="91.85,-97.24 89.75,-91.24 87.65,-97.24 91.85,-97.24"/>
+</g>
+<!-- N10 -->
+<g id="t1_node4" class="node">
+<title>N10</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="76,-36 22,-36 22,0 76,0 76,-36"/>
+<text text-anchor="middle" x="49" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">参加模考</text>
+</g>
+<!-- H&#45;&gt;N10 -->
+<g id="t1_edge3" class="edge">
+<title>H&#45;&gt;N10</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M120.17,-109.99C120.17,-85.58 120.17,-45 120.17,-45 120.17,-45 67,-45 67,-45 67,-45 67,-42.16 67,-42.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="69.1,-42.16 67,-36.16 64.9,-42.16 69.1,-42.16"/>
+</g>
+<!-- N11 -->
+<g id="t1_node5" class="node">
+<title>N11</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="156,-36 102,-36 102,0 156,0 156,-36"/>
+<text text-anchor="middle" x="129" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">分析学情</text>
+</g>
+<!-- H&#45;&gt;N11 -->
+<g id="t1_edge4" class="edge">
+<title>H&#45;&gt;N11</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M128.33,-109.84C128.33,-109.84 128.33,-42.19 128.33,-42.19"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="130.43,-42.19 128.33,-36.19 126.23,-42.19 130.43,-42.19"/>
+</g>
+<!-- N00&#45;&gt;N10 -->
+</g>
+</g>
+<g transform="translate(69.06,338.58)">
+<g id="t2_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 95)">
+<title>T</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-95 116,-95 116,4 -4,4"/>
+<!-- H -->
+<g id="t2_node1" class="node">
+<title>H</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.7" points="90.5,-91 21.5,-91 21.5,-55 90.5,-55 90.5,-91"/>
+<text text-anchor="middle" x="56" y="-69.9" font-family="Noto Sans CJK SC" font-size="12.00">智能问答</text>
+</g>
+<!-- N00 -->
+<g id="t2_node2" class="node">
+<title>N00</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="54,-36 0,-36 0,0 54,0 54,-36"/>
+<text text-anchor="middle" x="27" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">提出问题</text>
+</g>
+<!-- H&#45;&gt;N00 -->
+<g id="t2_edge1" class="edge">
+<title>H&#45;&gt;N00</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M37.75,-54.99C37.75,-54.99 37.75,-42.24 37.75,-42.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="39.85,-42.24 37.75,-36.24 35.65,-42.24 39.85,-42.24"/>
+</g>
+<!-- N01 -->
+<g id="t2_node3" class="node">
+<title>N01</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="112,-36 58,-36 58,0 112,0 112,-36"/>
+<text text-anchor="middle" x="85" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">管理会话</text>
+</g>
+<!-- H&#45;&gt;N01 -->
+<g id="t2_edge2" class="edge">
+<title>H&#45;&gt;N01</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M74.25,-54.99C74.25,-54.99 74.25,-42.24 74.25,-42.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="76.35,-42.24 74.25,-36.24 72.15,-42.24 76.35,-42.24"/>
+</g>
+</g>
+</g>
+<g transform="translate(267.38,311.08)">
+<g id="t3_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 150)">
+<title>T</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-150 160,-150 160,4 -4,4"/>
+<!-- H -->
+<g id="t3_node1" class="node">
+<title>H</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.7" points="136.5,-146 67.5,-146 67.5,-110 136.5,-110 136.5,-146"/>
+<text text-anchor="middle" x="102" y="-124.9" font-family="Noto Sans CJK SC" font-size="12.00">预约管理</text>
+</g>
+<!-- N00 -->
+<g id="t3_node2" class="node">
+<title>N00</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="54,-91 0,-91 0,-55 54,-55 54,-91"/>
+<text text-anchor="middle" x="27" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">查询教练</text>
+</g>
+<!-- H&#45;&gt;N00 -->
+<g id="t3_edge1" class="edge">
+<title>H&#45;&gt;N00</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M67.13,-128C47.55,-128 27,-128 27,-128 27,-128 27,-97.01 27,-97.01"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="29.1,-97.01 27,-91.01 24.9,-97.01 29.1,-97.01"/>
+</g>
+<!-- N01 -->
+<g id="t3_node3" class="node">
+<title>N01</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="112,-91 58,-91 58,-55 112,-55 112,-91"/>
+<text text-anchor="middle" x="85" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">申请预约</text>
+</g>
+<!-- H&#45;&gt;N01 -->
+<g id="t3_edge2" class="edge">
+<title>H&#45;&gt;N01</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M89.75,-109.99C89.75,-109.99 89.75,-97.24 89.75,-97.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="91.85,-97.24 89.75,-91.24 87.65,-97.24 91.85,-97.24"/>
+</g>
+<!-- N10 -->
+<g id="t3_node4" class="node">
+<title>N10</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="76,-36 22,-36 22,0 76,0 76,-36"/>
+<text text-anchor="middle" x="49" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">取消预约</text>
+</g>
+<!-- H&#45;&gt;N10 -->
+<g id="t3_edge3" class="edge">
+<title>H&#45;&gt;N10</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M120.17,-109.99C120.17,-85.58 120.17,-45 120.17,-45 120.17,-45 67,-45 67,-45 67,-45 67,-42.16 67,-42.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="69.1,-42.16 67,-36.16 64.9,-42.16 69.1,-42.16"/>
+</g>
+<!-- N11 -->
+<g id="t3_node5" class="node">
+<title>N11</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="156,-36 102,-36 102,0 156,0 156,-36"/>
+<text text-anchor="middle" x="129" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">处理预约</text>
+</g>
+<!-- H&#45;&gt;N11 -->
+<g id="t3_edge4" class="edge">
+<title>H&#45;&gt;N11</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M128.33,-109.84C128.33,-109.84 128.33,-42.19 128.33,-42.19"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="130.43,-42.19 128.33,-36.19 126.23,-42.19 130.43,-42.19"/>
+</g>
+<!-- N00&#45;&gt;N10 -->
+</g>
+</g>
+<g transform="translate(47.06,538.78)">
+<g id="t4_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 150)">
+<title>T</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-150 160,-150 160,4 -4,4"/>
+<!-- H -->
+<g id="t4_node1" class="node">
+<title>H</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.7" points="136.5,-146 67.5,-146 67.5,-110 136.5,-110 136.5,-146"/>
+<text text-anchor="middle" x="102" y="-124.9" font-family="Noto Sans CJK SC" font-size="12.00">教练管理</text>
+</g>
+<!-- N00 -->
+<g id="t4_node2" class="node">
+<title>N00</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="54,-91 0,-91 0,-55 54,-55 54,-91"/>
+<text text-anchor="middle" x="27" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">管理学员</text>
+</g>
+<!-- H&#45;&gt;N00 -->
+<g id="t4_edge1" class="edge">
+<title>H&#45;&gt;N00</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M67.13,-128C47.55,-128 27,-128 27,-128 27,-128 27,-97.01 27,-97.01"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="29.1,-97.01 27,-91.01 24.9,-97.01 29.1,-97.01"/>
+</g>
+<!-- N01 -->
+<g id="t4_node3" class="node">
+<title>N01</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="112,-91 58,-91 58,-55 112,-55 112,-91"/>
+<text text-anchor="middle" x="85" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">查看学情</text>
+</g>
+<!-- H&#45;&gt;N01 -->
+<g id="t4_edge2" class="edge">
+<title>H&#45;&gt;N01</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M89.75,-109.99C89.75,-109.99 89.75,-97.24 89.75,-97.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="91.85,-97.24 89.75,-91.24 87.65,-97.24 91.85,-97.24"/>
+</g>
+<!-- N10 -->
+<g id="t4_node4" class="node">
+<title>N10</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="76,-36 22,-36 22,0 76,0 76,-36"/>
+<text text-anchor="middle" x="49" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">生成建议</text>
+</g>
+<!-- H&#45;&gt;N10 -->
+<g id="t4_edge3" class="edge">
+<title>H&#45;&gt;N10</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M120.17,-109.99C120.17,-85.58 120.17,-45 120.17,-45 120.17,-45 67,-45 67,-45 67,-45 67,-42.16 67,-42.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="69.1,-42.16 67,-36.16 64.9,-42.16 69.1,-42.16"/>
+</g>
+<!-- N11 -->
+<g id="t4_node5" class="node">
+<title>N11</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="156,-36 102,-36 102,0 156,0 156,-36"/>
+<text text-anchor="middle" x="129" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">收发消息</text>
+</g>
+<!-- H&#45;&gt;N11 -->
+<g id="t4_edge4" class="edge">
+<title>H&#45;&gt;N11</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M128.33,-109.84C128.33,-109.84 128.33,-42.19 128.33,-42.19"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="130.43,-42.19 128.33,-36.19 126.23,-42.19 130.43,-42.19"/>
+</g>
+<!-- N00&#45;&gt;N10 -->
+</g>
+</g>
+<g transform="translate(241.38,483.78)">
+<g id="t5_graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 260)">
+<title>T</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-260 212,-260 212,4 -4,4"/>
+<!-- H -->
+<g id="t5_node1" class="node">
+<title>H</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.7" points="174.5,-256 93.5,-256 93.5,-220 174.5,-220 174.5,-256"/>
+<text text-anchor="middle" x="134" y="-234.9" font-family="Noto Sans CJK SC" font-size="12.00">管理员管理</text>
+</g>
+<!-- N00 -->
+<g id="t5_node2" class="node">
+<title>N00</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="54,-201 0,-201 0,-165 54,-165 54,-201"/>
+<text text-anchor="middle" x="27" y="-180.5" font-family="Noto Sans CJK SC" font-size="10.00">查看数据</text>
+</g>
+<!-- H&#45;&gt;N00 -->
+<g id="t5_edge1" class="edge">
+<title>H&#45;&gt;N00</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M93.24,-238C63,-238 27,-238 27,-238 27,-238 27,-207.01 27,-207.01"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="29.1,-207.01 27,-201.01 24.9,-207.01 29.1,-207.01"/>
+</g>
+<!-- N01 -->
+<g id="t5_node3" class="node">
+<title>N01</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="112,-201 58,-201 58,-165 112,-165 112,-201"/>
+<text text-anchor="middle" x="85" y="-180.5" font-family="Noto Sans CJK SC" font-size="10.00">管理用户</text>
+</g>
+<!-- H&#45;&gt;N01 -->
+<g id="t5_edge2" class="edge">
+<title>H&#45;&gt;N01</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M102.75,-219.99C102.75,-219.99 102.75,-207.24 102.75,-207.24"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="104.85,-207.24 102.75,-201.24 100.65,-207.24 104.85,-207.24"/>
+</g>
+<!-- N10 -->
+<g id="t5_node4" class="node">
+<title>N10</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="66,-146 12,-146 12,-110 66,-110 66,-146"/>
+<text text-anchor="middle" x="39" y="-125.5" font-family="Noto Sans CJK SC" font-size="10.00">管理绑定</text>
+</g>
+<!-- H&#45;&gt;N10 -->
+<g id="t5_edge3" class="edge">
+<title>H&#45;&gt;N10</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M118.5,-219.99C118.5,-195.58 118.5,-155 118.5,-155 118.5,-155 62,-155 62,-155 62,-155 62,-152.16 62,-152.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="64.1,-152.16 62,-146.16 59.9,-152.16 64.1,-152.16"/>
+</g>
+<!-- N11 -->
+<g id="t5_node5" class="node">
+<title>N11</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="131.5,-146 70.5,-146 70.5,-110 131.5,-110 131.5,-146"/>
+<text text-anchor="middle" x="101" y="-125.5" font-family="Noto Sans CJK SC" font-size="10.00">管理知识点</text>
+</g>
+<!-- H&#45;&gt;N11 -->
+<g id="t5_edge4" class="edge">
+<title>H&#45;&gt;N11</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M125,-219.84C125,-219.84 125,-152.19 125,-152.19"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="127.1,-152.19 125,-146.19 122.9,-152.19 127.1,-152.19"/>
+</g>
+<!-- N20 -->
+<g id="t5_node6" class="node">
+<title>N20</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="106,-91 52,-91 52,-55 106,-55 106,-91"/>
+<text text-anchor="middle" x="79" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">管理题库</text>
+</g>
+<!-- H&#45;&gt;N20 -->
+<g id="t5_edge5" class="edge">
+<title>H&#45;&gt;N20</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M142.33,-219.96C142.33,-182.55 142.33,-100 142.33,-100 142.33,-100 88.25,-100 88.25,-100 88.25,-100 88.25,-97.16 88.25,-97.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="90.35,-97.16 88.25,-91.16 86.15,-97.16 90.35,-97.16"/>
+</g>
+<!-- N21 -->
+<g id="t5_node7" class="node">
+<title>N21</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="164,-91 110,-91 110,-55 164,-55 164,-91"/>
+<text text-anchor="middle" x="137" y="-70.5" font-family="Noto Sans CJK SC" font-size="10.00">管理试卷</text>
+</g>
+<!-- H&#45;&gt;N21 -->
+<g id="t5_edge6" class="edge">
+<title>H&#45;&gt;N21</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M153.17,-219.71C153.17,-219.71 153.17,-97.12 153.17,-97.12"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="155.27,-97.12 153.17,-91.12 151.07,-97.12 155.27,-97.12"/>
+</g>
+<!-- N30 -->
+<g id="t5_node8" class="node">
+<title>N30</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="128,-36 74,-36 74,0 128,0 128,-36"/>
+<text text-anchor="middle" x="101" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">查看预约</text>
+</g>
+<!-- H&#45;&gt;N30 -->
+<g id="t5_edge7" class="edge">
+<title>H&#45;&gt;N30</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M167.5,-219.84C167.5,-171.8 167.5,-45 167.5,-45 167.5,-45 119,-45 119,-45 119,-45 119,-42.16 119,-42.16"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="121.1,-42.16 119,-36.16 116.9,-42.16 121.1,-42.16"/>
+</g>
+<!-- N31 -->
+<g id="t5_node9" class="node">
+<title>N31</title>
+<polygon fill="white" stroke="#37474f" stroke-width="1.2" points="208,-36 154,-36 154,0 208,0 208,-36"/>
+<text text-anchor="middle" x="181" y="-15.5" font-family="Noto Sans CJK SC" font-size="10.00">统计问答</text>
+</g>
+<!-- H&#45;&gt;N31 -->
+<g id="t5_edge8" class="edge">
+<title>H&#45;&gt;N31</title>
+<path fill="none" stroke="#37474f" stroke-width="1.1" d="M171,-220C171,-220 171,-42.25 171,-42.25"/>
+<polygon fill="#37474f" stroke="#37474f" stroke-width="1.1" points="173.1,-42.25 171,-36.25 168.9,-42.25 173.1,-42.25"/>
+</g>
+<!-- N00&#45;&gt;N10 -->
+<!-- N10&#45;&gt;N20 -->
+<!-- N20&#45;&gt;N30 -->
+</g>
+</g>
+</svg>

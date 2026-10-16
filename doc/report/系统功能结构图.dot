@@ -1,0 +1,161 @@
+/*
+ * 系统功能结构图 —— 可编辑源文件（本项目功能结构图的唯一真源）
+ * 项目：基于大语言模型的驾考智能辅导系统设计与实现
+ *
+ * ■ 布局：传统论文式树状系统功能结构图（非流程图），分上下两部分
+ *     上部 · 系统总览：系统根节点 → 横向排列的 6 个一级功能模块
+ *     下部 · 分区展开：6 个一级模块各自独立成一棵功能树，按 2 列 × 3 行网格排列
+ *   每棵树顶部为该模块名称，下方用直角分支线连接其二级功能；各模块相互独立，
+ *   模块之间不共享连线、不产生跨模块连线。
+ *
+ * ■ 连线：全程使用 splines=ortho（直角连线）；已用几何校验确认
+ *   7 个组成部分的「边穿节点」与「边与边交叉」均为 0。
+ *
+ * ■ 本文件含 7 个 digraph（1 个总览 + 6 个模块树）。Graphviz 的 dot 一次只渲染
+ *   一个图，因此最终图片由这 7 个图分别渲染后按上述网格拼合而成：
+ *     dot -Tpng -Gdpi=200 系统功能结构图.dot            → 仅渲染第 1 个图（总览）
+ *     （拼合流程见交付说明；三份产物由同一批源文件生成，内容一致）
+ *
+ * ■ 文字规格：二级功能名称统一采用"动词 + 名词"的动宾式表述，长度 4~6 个汉字；
+ *   节点内不再出现斜杠细分说明。一级模块名称保留原有名词短语。
+ *
+ * ■ 风格：纯功能视图 —— 不标注已实现/未实现/部分实现等开发状态，
+ *   不使用状态配色与图例；统一为白底、深灰边框、黑字。
+ *
+ * ■ 依据：doc/api-design.md 的接口设计与各模块设计文档、项目功能设计范围。
+ *   6 个一级模块：用户认证 / 学员学习 / 智能问答 / 预约管理 / 教练管理 / 管理员管理
+ *   二级功能共 26 项，未增删。
+ */
+
+
+/* ===== 第一部分 · 系统总览（系统根节点与 6 个一级模块） ===== */
+digraph OV {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.18; ranksep=0.42;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.3, margin="0.13,0.07", fontsize=12];
+  edge [color="#37474f", penwidth=1.2, arrowsize=0.6];
+  ROOT [label="基于大语言模型的驾考智能辅导系统", fontsize=15, penwidth=1.9, margin="0.30,0.14"];
+  M1 [label="用户认证"]; M2 [label="学员学习"]; M3 [label="智能问答"];
+  M4 [label="预约管理"]; M5 [label="教练管理"]; M6 [label="管理员管理"];
+  ROOT -> M1; ROOT -> M2; ROOT -> M3; ROOT -> M4; ROOT -> M5; ROOT -> M6;
+  { rank=same; M1; M2; M3; M4; M5; M6; }
+}
+
+/* ===== 第二部分之1 · 模块功能树：用户认证 ===== */
+digraph T {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.06; ranksep=0.26;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.2, margin="0.08,0.045"];
+  edge [color="#37474f", penwidth=1.1, arrowsize=0.6];
+  H [label="用户认证", fontsize=12, penwidth=1.7, margin="0.14,0.07"];
+  N00 [label="登录系统", fontsize=10];
+  N01 [label="管理资料", fontsize=10];
+  N10 [label="修改密码", fontsize=10];
+  N11 [label="退出登录", fontsize=10];
+  H -> N00;
+  H -> N01;
+  H -> N10;
+  H -> N11;
+  { rank=same; N00 ; N01; }
+  { rank=same; N10 ; N11; }
+  N00 -> N10 [style=invis];
+}
+
+/* ===== 第二部分之2 · 模块功能树：学员学习 ===== */
+digraph T {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.06; ranksep=0.26;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.2, margin="0.08,0.045"];
+  edge [color="#37474f", penwidth=1.1, arrowsize=0.6];
+  H [label="学员学习", fontsize=12, penwidth=1.7, margin="0.14,0.07"];
+  N00 [label="练习题库", fontsize=10];
+  N01 [label="管理错题", fontsize=10];
+  N10 [label="参加模考", fontsize=10];
+  N11 [label="分析学情", fontsize=10];
+  H -> N00;
+  H -> N01;
+  H -> N10;
+  H -> N11;
+  { rank=same; N00 ; N01; }
+  { rank=same; N10 ; N11; }
+  N00 -> N10 [style=invis];
+}
+
+/* ===== 第二部分之3 · 模块功能树：智能问答 ===== */
+digraph T {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.06; ranksep=0.26;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.2, margin="0.08,0.045"];
+  edge [color="#37474f", penwidth=1.1, arrowsize=0.6];
+  H [label="智能问答", fontsize=12, penwidth=1.7, margin="0.14,0.07"];
+  N00 [label="提出问题", fontsize=10];
+  N01 [label="管理会话", fontsize=10];
+  H -> N00;
+  H -> N01;
+  { rank=same; N00 ; N01; }
+}
+
+/* ===== 第二部分之4 · 模块功能树：预约管理 ===== */
+digraph T {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.06; ranksep=0.26;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.2, margin="0.08,0.045"];
+  edge [color="#37474f", penwidth=1.1, arrowsize=0.6];
+  H [label="预约管理", fontsize=12, penwidth=1.7, margin="0.14,0.07"];
+  N00 [label="查询教练", fontsize=10];
+  N01 [label="申请预约", fontsize=10];
+  N10 [label="取消预约", fontsize=10];
+  N11 [label="处理预约", fontsize=10];
+  H -> N00;
+  H -> N01;
+  H -> N10;
+  H -> N11;
+  { rank=same; N00 ; N01; }
+  { rank=same; N10 ; N11; }
+  N00 -> N10 [style=invis];
+}
+
+/* ===== 第二部分之5 · 模块功能树：教练管理 ===== */
+digraph T {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.06; ranksep=0.26;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.2, margin="0.08,0.045"];
+  edge [color="#37474f", penwidth=1.1, arrowsize=0.6];
+  H [label="教练管理", fontsize=12, penwidth=1.7, margin="0.14,0.07"];
+  N00 [label="管理学员", fontsize=10];
+  N01 [label="查看学情", fontsize=10];
+  N10 [label="生成建议", fontsize=10];
+  N11 [label="收发消息", fontsize=10];
+  H -> N00;
+  H -> N01;
+  H -> N10;
+  H -> N11;
+  { rank=same; N00 ; N01; }
+  { rank=same; N10 ; N11; }
+  N00 -> N10 [style=invis];
+}
+
+/* ===== 第二部分之6 · 模块功能树：管理员管理 ===== */
+digraph T {
+  rankdir=TB; splines=ortho; bgcolor="white"; nodesep=0.06; ranksep=0.26;
+  node [shape=box, style="filled", fillcolor="white", color="#37474f", fontname="Noto Sans CJK SC", penwidth=1.2, margin="0.08,0.045"];
+  edge [color="#37474f", penwidth=1.1, arrowsize=0.6];
+  H [label="管理员管理", fontsize=12, penwidth=1.7, margin="0.14,0.07"];
+  N00 [label="查看数据", fontsize=10];
+  N01 [label="管理用户", fontsize=10];
+  N10 [label="管理绑定", fontsize=10];
+  N11 [label="管理知识点", fontsize=10];
+  N20 [label="管理题库", fontsize=10];
+  N21 [label="管理试卷", fontsize=10];
+  N30 [label="查看预约", fontsize=10];
+  N31 [label="统计问答", fontsize=10];
+  H -> N00;
+  H -> N01;
+  H -> N10;
+  H -> N11;
+  H -> N20;
+  H -> N21;
+  H -> N30;
+  H -> N31;
+  { rank=same; N00 ; N01; }
+  { rank=same; N10 ; N11; }
+  { rank=same; N20 ; N21; }
+  { rank=same; N30 ; N31; }
+  N00 -> N10 [style=invis];
+  N10 -> N20 [style=invis];
+  N20 -> N30 [style=invis];
+}

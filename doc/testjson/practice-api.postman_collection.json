@@ -1,0 +1,1218 @@
+{
+  "info": {
+    "name": "驾考系统 · 刷题模块回归测试",
+    "description": "刷题模块回归测试。\n\n【⚠️ 数据基线（决定所有计数断言）】\n种子 = sql/seed-question.sql + sql/seed-question-extra.sql → 共 36 题（id 1~36，全部 SUBJECT_1）。\n知识点含子孙题数：kp1=22（直属 2 + 子孙 kp2=12、kp3=8）、kp4=14；题目总数 36。\n若题库规模变化，本集合里的计数断言（total / pages / questionCount 等）必须同步更新——\n否则会出现「期望 18、实际 36」这类过期断言（本集合曾因种子从 18 扩到 36 而失败 9 条）。\n最后更新：2026-10-08（对齐 36 题种子）。\n\n【★ 唯一真源：本文件】\n改了本 .json 后，必须**重新导入 Apifox**，否则 Apifox 里跑的是旧副本（不会自动同步）。\n建议：跑前先删掉 Apifox 里的旧集合，再导入本文件，避免存在两份、跑错那份。\n\n使用步骤：\n1. 后端已启动（默认 http://localhost:8080）\n2. 执行 sql/seed-question.sql 与 sql/seed-question-extra.sql（共 36 题）\n3. 先跑「00 · 登录」拿 token（会自动写入 {{token}} 变量）\n4. 再「运行」整个集合，看通过/失败清单\n\n对应 doc/test-cases-practice.md 的 TC-01 ~ TC-20。\n注意：提交作答类用例会写库（answer_record / wrong_book），反复运行会累积记录，属正常。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "testPassword",
+      "value": ""
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备",
+      "item": [
+        {
+          "name": "00 · 登录（拿 token，自动写入变量）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"返回 token\", function () { pm.expect(j.data.token).to.be.a(\"string\").and.not.empty; });",
+                  "",
+                  "// 把 token 写入变量，后续请求通过 {{token}} 引用。",
+                  "// 不同版本 Apifox 的变量 API 略有差异，这里同时尝试三种，任一成功即可。",
+                  "var token = j.data.token;",
+                  "try { pm.collectionVariables.set(\"token\", token); } catch (e) {}",
+                  "try { pm.environment.set(\"token\", token); } catch (e) {}",
+                  "try { pm.variables.set(\"token\", token); } catch (e) {}",
+                  "console.log(\"token =\", token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 · 查询接口",
+      "item": [
+        {
+          "name": "TC-01 知识点树（根节点 2 个，kp1 含子孙=22）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/knowledge-points?subjectCode=SUBJECT_1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "knowledge-points"
+              ],
+              "query": [
+                {
+                  "key": "subjectCode",
+                  "value": "SUBJECT_1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "pm.test(\"根节点 2 个\", function () { pm.expect(j.data.length).to.eql(2); });",
+                  "var kp1 = j.data.filter(function (n) { return n.id === 1; })[0];",
+                  "pm.test(\"kp1.questionCount = 22（含子孙累加）\", function () { pm.expect(kp1.questionCount).to.eql(22); });",
+                  "var kp4 = j.data.filter(function (n) { return n.id === 4; })[0];",
+                  "pm.test(\"kp4.questionCount = 14\", function () { pm.expect(kp4.questionCount).to.eql(14); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-02 知识点树 · 缺必填参数 → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/knowledge-points",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "knowledge-points"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败也走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });",
+                  "pm.test(\"message 含「subjectCode」\", function () { pm.expect(j.message).to.include(\"subjectCode\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-03 顺序练习 · 默认分页（36 题 / 4 页，每页 10 条）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/sequence?subjectCode=SUBJECT_1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "sequence"
+              ],
+              "query": [
+                {
+                  "key": "subjectCode",
+                  "value": "SUBJECT_1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"total = 36\", function () { pm.expect(j.data.total).to.eql(36); });",
+                  "pm.test(\"默认 pageNum = 1\", function () { pm.expect(j.data.pageNum).to.eql(1); });",
+                  "pm.test(\"默认 pageSize = 10\", function () { pm.expect(j.data.pageSize).to.eql(10); });",
+                  "pm.test(\"pages = 4\", function () { pm.expect(j.data.pages).to.eql(4); });",
+                  "pm.test(\"records 10 条\", function () { pm.expect(j.data.records.length).to.eql(10); });",
+                  "pm.test(\"records 中每道题都无 answer/analysis\", function () {",
+                  "  j.data.records.forEach(function (q) {",
+                  "    pm.expect(q).to.not.have.property(\"answer\");",
+                  "    pm.expect(q).to.not.have.property(\"analysis\");",
+                  "    (q.options || []).forEach(function (o) { pm.expect(o).to.not.have.property(\"isCorrect\"); });",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-04 顺序练习 · 第 2 页 pageSize=5",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/sequence?subjectCode=SUBJECT_1&pageNum=2&pageSize=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "sequence"
+              ],
+              "query": [
+                {
+                  "key": "subjectCode",
+                  "value": "SUBJECT_1"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "2"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"pages = 8\", function () { pm.expect(j.data.pages).to.eql(8); });",
+                  "pm.test(\"records 5 条\", function () { pm.expect(j.data.records.length).to.eql(5); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-05a 章节练习 · 父节点 kp=1 → 22（含子孙）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/chapter?knowledgePointId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "chapter"
+              ],
+              "query": [
+                {
+                  "key": "knowledgePointId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"total = 22\", function () { pm.expect(j.data.total).to.eql(22); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-05b 章节练习 · 子节点 kp=2 → 12",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/chapter?knowledgePointId=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "chapter"
+              ],
+              "query": [
+                {
+                  "key": "knowledgePointId",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"total = 12\", function () { pm.expect(j.data.total).to.eql(12); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-05c 章节练习 · 子节点 kp=3 → 8",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/chapter?knowledgePointId=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "chapter"
+              ],
+              "query": [
+                {
+                  "key": "knowledgePointId",
+                  "value": "3"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"total = 8\", function () { pm.expect(j.data.total).to.eql(8); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-06 章节练习 · 知识点不存在 → 2001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/chapter?knowledgePointId=9999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "chapter"
+              ],
+              "query": [
+                {
+                  "key": "knowledgePointId",
+                  "value": "9999"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败也走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 2001\", function () { pm.expect(j.code).to.eql(2001); });",
+                  "pm.test(\"message 含「知识点」\", function () { pm.expect(j.message).to.include(\"知识点\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-07 随机练习 · count=5",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/random?subjectCode=SUBJECT_1&count=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "random"
+              ],
+              "query": [
+                {
+                  "key": "subjectCode",
+                  "value": "SUBJECT_1"
+                },
+                {
+                  "key": "count",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"返回 5 道\", function () { pm.expect(j.data.length).to.eql(5); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-08 随机练习 · count=100（取满题库 36 道）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/random?subjectCode=SUBJECT_1&count=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "random"
+              ],
+              "query": [
+                {
+                  "key": "subjectCode",
+                  "value": "SUBJECT_1"
+                },
+                {
+                  "key": "count",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"最多返回 36 道\", function () { pm.expect(j.data.length).to.eql(36); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-09 题目详情 · id=1（4 个选项，不泄露答案）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "1"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"题目不得泄露 answer\", function () { pm.expect(j.data).to.not.have.property(\"answer\"); });",
+                  "pm.test(\"题目不得泄露 analysis\", function () { pm.expect(j.data).to.not.have.property(\"analysis\"); });",
+                  "pm.test(\"4 个选项\", function () { pm.expect(j.data.options.length).to.eql(4); });",
+                  "pm.test(\"选项不含 isCorrect\", function () { j.data.options.forEach(function (o) { pm.expect(o).to.not.have.property(\"isCorrect\"); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-10 题目详情 · 不存在 → 2002",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/questions/9999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "questions",
+                "9999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败也走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 2002\", function () { pm.expect(j.code).to.eql(2002); });",
+                  "pm.test(\"message 含「题目」\", function () { pm.expect(j.message).to.include(\"题目\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 · 提交作答（会写库）",
+      "item": [
+        {
+          "name": "TC-11 单选 · Q1 答 A → 正确",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"correctAnswer = A\", function () { pm.expect(j.data.correctAnswer).to.eql(\"A\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-12 单选 · Q1 答 a（小写）→ 正确",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 1,\n  \"userAnswer\": \"a\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"correctAnswer = A\", function () { pm.expect(j.data.correctAnswer).to.eql(\"A\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-15a 全角归一化 · Q6 答 A（标准答案存的是全角 Ａ）→ 正确",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 6,\n  \"userAnswer\": \"A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"correctAnswer = Ａ\", function () { pm.expect(j.data.correctAnswer).to.eql(\"Ａ\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-15b 全角归一化 · Q6 答全角 Ａ → 正确",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 6,\n  \"userAnswer\": \"Ａ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"correctAnswer = Ａ\", function () { pm.expect(j.data.correctAnswer).to.eql(\"Ａ\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-16a 多选归一化 · Q9 答 BA（标准答案 A,B）→ 正确",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 9,\n  \"userAnswer\": \"BA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"correctAnswer = A,B\", function () { pm.expect(j.data.correctAnswer).to.eql(\"A,B\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-16b 多选 · Q9 答 A（少选）→ 错误",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 9,\n  \"userAnswer\": \"A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });",
+                  "pm.test(\"correctAnswer = A,B\", function () { pm.expect(j.data.correctAnswer).to.eql(\"A,B\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-17 多选 · Q8 答 ABC（标准答案 AB，多选）→ 错误",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 8,\n  \"userAnswer\": \"ABC\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });",
+                  "pm.test(\"correctAnswer = AB\", function () { pm.expect(j.data.correctAnswer).to.eql(\"AB\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-18 判断同义映射 · Q12 答 T → 正确",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 12,\n  \"userAnswer\": \"T\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = true\", function () { pm.expect(j.data.isCorrect).to.eql(true); });",
+                  "pm.test(\"correctAnswer = 对\", function () { pm.expect(j.data.correctAnswer).to.eql(\"对\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-13 单选答错 · Q4 答 A（标准答案 B）→ 错误 + 写错题本",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionId\": 4,\n  \"userAnswer\": \"A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"isCorrect = false\", function () { pm.expect(j.data.isCorrect).to.eql(false); });",
+                  "pm.test(\"correctAnswer = B\", function () { pm.expect(j.data.correctAnswer).to.eql(\"B\"); });",
+                  "pm.test(\"返回解析\", function () { pm.expect(j.data).to.have.property(\"analysis\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-19 参数校验 · 空 body → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/answer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "answer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败也走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 · 鉴权",
+      "item": [
+        {
+          "name": "TC-20 鉴权 · 不带 token 访问 → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/study/knowledge-points?subjectCode=SUBJECT_1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "study",
+                "knowledge-points"
+              ],
+              "query": [
+                {
+                  "key": "subjectCode",
+                  "value": "SUBJECT_1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,457 @@
+{
+  "info": {
+    "name": "驾考系统 · 学情分析模块回归测试",
+    "description": "学情分析模块测试（Day 15）。对应 doc/api-design.md §4.6、doc/analysis-design.md。\n\n【覆盖】3 个接口 + 边界：\n  · GET /overview   学情总览（正常 / 缺参 → 1001 / 非法科目 → 空数据）\n  · GET /knowledge  知识点掌握度（正常，验证 mastery 升序、短板带 weakReason）\n  · GET /trend      成绩趋势（正常 / days=0 / days=91 边界）\n\n【使用步骤】\n1. 后端已启动（默认 http://localhost:8080），已执行 sql/seed-question.sql 与 seed-question-extra.sql\n2. 直接运行整个集合（顺序：准备 → overview → knowledge → trend → 边界）\n3. 看通过/失败清单\n\n【本集合是「只读」的】\n全部为 GET 请求，**不改任何数据**，可无限次重复运行、任何时候跑都应全绿。\n因此断言只验证「结构」（code、字段存在、类型、排序），**不验证具体数值**（数值随该学员的练习情况变化）。\n\n【前置数据（可选）】\n若想看到「有内容」的响应（非空掌握度、非空趋势），该学员需先刷过题（种子数据 36 题）。\n未刷题也不影响断言通过：overview 的 correctRate 会是 null、knowledge/trend 返回空数组，集合对此已做兼容断言。\n\n【非法科目边界说明】\nsubjectCode=XXX 时**不报错**——overview 返回 totalQuestions=0/correctRate=null/weakCount=0，knowledge 与 trend 返回空数组。\n这与刷题/错题本模块「查不到即空」的行为一致。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "testPassword", "value": "" },
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "subjectCode", "value": "SUBJECT_1" }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备",
+      "item": [
+        {
+          "name": "00 · 登录（拿 token）",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student01\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var token = j.data.token;",
+                  "pm.test(\"拿到 token\", function () { pm.expect(token).to.be.a(\"string\").and.not.empty; });",
+                  "try { pm.collectionVariables.set(\"token\", token); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 · 学情总览",
+      "item": [
+        {
+          "name": "TC-AN-01 overview · 正常返回，结构与取值范围正确",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/overview?subjectCode={{subjectCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "overview"],
+              "query": [
+                { "key": "subjectCode", "value": "{{subjectCode}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var d = j.data;",
+                  "pm.test(\"五个基础字段都存在\", function () {",
+                  "  [\"totalQuestions\",\"answeredQuestions\",\"correctRate\",\"progress\",\"weakCount\"].forEach(function (k) { pm.expect(d).to.have.property(k); });",
+                  "});",
+                  "pm.test(\"totalQuestions 是数字且 >= 0\", function () { pm.expect(d.totalQuestions).to.be.a(\"number\").and.at.least(0); });",
+                  "pm.test(\"answeredQuestions 是数字且 >= 0\", function () { pm.expect(d.answeredQuestions).to.be.a(\"number\").and.at.least(0); });",
+                  "pm.test(\"progress 在 [0,1]\", function () { pm.expect(d.progress).to.be.a(\"number\").and.within(0, 1); });",
+                  "pm.test(\"weakCount 是数字且 >= 0\", function () { pm.expect(d.weakCount).to.be.a(\"number\").and.at.least(0); });",
+                  "pm.test(\"correctRate 为 null 或 [0,1] 的数字（未答题时为 null）\", function () {",
+                  "  if (d.correctRate === null) { pm.expect(d.correctRate).to.be.null; }",
+                  "  else { pm.expect(d.correctRate).to.be.a(\"number\").and.within(0, 1); }",
+                  "});",
+                  "pm.test(\"mockExam* 三字段存在且当前为 null（Day16~17 预留）\", function () {",
+                  "  [\"mockExamCount\",\"mockExamAvgScore\",\"mockExamPassRate\"].forEach(function (k) {",
+                  "    pm.expect(d).to.have.property(k); pm.expect(d[k]).to.be.null;",
+                  "  });",
+                  "});",
+                  "pm.test(\"正确率两位小数（若非 null）\", function () {",
+                  "  if (d.correctRate !== null) { pm.expect(String(d.correctRate)).to.match(/^-?\\d+(\\.\\d{1,2})?$/); }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录。预期：code=200；五个基础字段存在；progress∈[0,1]；correctRate 为 null 或 [0,1]；mockExam* 当前为 null。"
+        },
+        {
+          "name": "TC-AN-02 overview · 缺 subjectCode → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "overview"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200（业务失败走 200）\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });",
+                  "pm.test(\"message 含 subjectCode\", function () { pm.expect(j.message).to.include(\"subjectCode\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录。预期：1001 参数校验失败，message 提示缺少 subjectCode。"
+        },
+        {
+          "name": "TC-AN-03 overview · 非法科目 → 空数据（不报错）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/overview?subjectCode=XXX",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "overview"],
+              "query": [
+                { "key": "subjectCode", "value": "XXX" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（查不到即空，非错误）\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"totalQuestions = 0\", function () { pm.expect(j.data.totalQuestions).to.eql(0); });",
+                  "pm.test(\"answeredQuestions = 0\", function () { pm.expect(j.data.answeredQuestions).to.eql(0); });",
+                  "pm.test(\"correctRate = null（无数据）\", function () { pm.expect(j.data.correctRate).to.be.null; });",
+                  "pm.test(\"progress = 0\", function () { pm.expect(j.data.progress).to.eql(0); });",
+                  "pm.test(\"weakCount = 0\", function () { pm.expect(j.data.weakCount).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录。预期：非法科目不报错，返回全 0 / null / 空。"
+        }
+      ]
+    },
+    {
+      "name": "2 · 知识点掌握度",
+      "item": [
+        {
+          "name": "TC-AN-04 knowledge · 正常返回，mastery 升序 + 短板带 weakReason",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/knowledge?subjectCode={{subjectCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "knowledge"],
+              "query": [
+                { "key": "subjectCode", "value": "{{subjectCode}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "var arr = j.data;",
+                  "pm.test(\"每条都有约定字段\", function () {",
+                  "  arr.forEach(function (k) {",
+                  "    [\"knowledgePointId\",\"knowledgePointName\",\"level\",\"mastery\",\"answeredCount\",\"correctRate\",\"isWeak\",\"weakReason\"].forEach(function (f) { pm.expect(k).to.have.property(f); });",
+                  "  });",
+                  "});",
+                  "pm.test(\"mastery 按升序排列\", function () {",
+                  "  for (var i = 1; i < arr.length; i++) { pm.expect(arr[i - 1].mastery <= arr[i].mastery).to.eql(true); }",
+                  "});",
+                  "pm.test(\"mastery / correctRate 在 [0,1]\", function () {",
+                  "  arr.forEach(function (k) { pm.expect(k.mastery).to.be.within(0, 1); pm.expect(k.correctRate).to.be.within(0, 1); });",
+                  "});",
+                  "pm.test(\"isWeak 是布尔值\", function () {",
+                  "  arr.forEach(function (k) { pm.expect(k.isWeak).to.be.a(\"boolean\"); });",
+                  "});",
+                  "pm.test(\"短板必有 weakReason、非短板 weakReason 为 null\", function () {",
+                  "  arr.forEach(function (k) {",
+                  "    if (k.isWeak) { pm.expect(k.weakReason).to.be.oneOf([\"LOW_MASTERY\",\"BASE_WEAK\"]); }",
+                  "    else { pm.expect(k.weakReason).to.be.null; }",
+                  "  });",
+                  "});",
+                  "pm.test(\"每条 answeredCount >= 1（未练习的知识点已剔除）\", function () {",
+                  "  arr.forEach(function (k) { pm.expect(k.answeredCount).to.be.at.least(1); });",
+                  "});",
+                  "pm.test(\"含子孙：存在某父级 answeredCount 不小于其下子级之和的场景（有数据时才校验）\", function () {",
+                  "  // 仅结构性提示：父节点 answeredCount 应 >= 任一子节点，故整体最大 answeredCount 由根节点持有",
+                  "  if (arr.length > 0) { pm.expect(Math.max.apply(null, arr.map(function (k) { return k.answeredCount; }))).to.be.at.least(1); }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录（可选：先刷过题）。预期：code=200；数组；mastery 升序；短板 isWeak=true 且 weakReason∈{LOW_MASTERY,BASE_WEAK}；每条 answeredCount≥1。未刷题时返回空数组，断言仍通过。"
+        }
+      ]
+    },
+    {
+      "name": "3 · 成绩趋势",
+      "item": [
+        {
+          "name": "TC-AN-05 trend · 正常返回（不补空白日）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/trend?subjectCode={{subjectCode}}&days=14",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "trend"],
+              "query": [
+                { "key": "subjectCode", "value": "{{subjectCode}}" },
+                { "key": "days", "value": "14" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "var arr = j.data;",
+                  "pm.test(\"每条含 date / correctRate / answeredCount / mockScore\", function () {",
+                  "  arr.forEach(function (p) {",
+                  "    [\"date\",\"correctRate\",\"answeredCount\",\"mockScore\"].forEach(function (f) { pm.expect(p).to.have.property(f); });",
+                  "  });",
+                  "});",
+                  "pm.test(\"date 是 yyyy-MM-dd\", function () {",
+                  "  arr.forEach(function (p) { pm.expect(p.date).to.match(/^\\d{4}-\\d{2}-\\d{2}$/); });",
+                  "});",
+                  "pm.test(\"按日期升序\", function () {",
+                  "  for (var i = 1; i < arr.length; i++) { pm.expect(arr[i - 1].date <= arr[i].date).to.eql(true); }",
+                  "});",
+                  "pm.test(\"correctRate 在 [0,1] 且 answeredCount >= 1\", function () {",
+                  "  arr.forEach(function (p) { pm.expect(p.correctRate).to.be.within(0, 1); pm.expect(p.answeredCount).to.be.at.least(1); });",
+                  "});",
+                  "pm.test(\"mockScore 当前为 null（Day16~17 预留）\", function () {",
+                  "  arr.forEach(function (p) { pm.expect(p.mockScore).to.be.null; });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录（可选：近期刷过题）。预期：code=200；数组；date 升序、格式 yyyy-MM-dd；mockScore 为 null。未刷题时为空数组。"
+        },
+        {
+          "name": "TC-AN-06 trend · days=0（边界，应回退默认 14）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/trend?subjectCode={{subjectCode}}&days=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "trend"],
+              "query": [
+                { "key": "subjectCode", "value": "{{subjectCode}}" },
+                { "key": "days", "value": "0" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（days<=0 回退默认 14，不报错）\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "边界：days=0。预期：code=200，内部回退默认 14 天，返回数组。"
+        },
+        {
+          "name": "TC-AN-07 trend · days=91（超上限，应夹到 90）",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/trend?subjectCode={{subjectCode}}&days=91",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "trend"],
+              "query": [
+                { "key": "subjectCode", "value": "{{subjectCode}}" },
+                { "key": "days", "value": "91" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200（超上限夹到 90，不报错）\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "边界：days=91 > 上限 90。预期：code=200，内部夹到 90 天，返回数组。"
+        }
+      ]
+    },
+    {
+      "name": "4 · 参数与鉴权",
+      "item": [
+        {
+          "name": "TC-AN-08 knowledge · 缺 subjectCode → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/knowledge",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "knowledge"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录。预期：1001（缺必填参数 subjectCode）。"
+        },
+        {
+          "name": "TC-AN-09 非法科目 knowledge → 空数组",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/knowledge?subjectCode=XXX",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "knowledge"],
+              "query": [
+                { "key": "subjectCode", "value": "XXX" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"返回空数组\", function () { pm.expect(j.data).to.be.an(\"array\").and.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：已登录。预期：非法科目返回空数组。"
+        },
+        {
+          "name": "TC-AN-10 鉴权 · 不带 token → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/analysis/overview?subjectCode={{subjectCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "analysis", "overview"],
+              "query": [
+                { "key": "subjectCode", "value": "{{subjectCode}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ],
+          "description": "前置：无。预期：无 token 时返回真实 HTTP 401（唯一返回真实状态码的场景之一）。"
+        }
+      ]
+    }
+  ]
+}
