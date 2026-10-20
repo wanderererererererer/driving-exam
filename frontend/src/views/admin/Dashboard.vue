@@ -33,13 +33,13 @@ const cards = [
   margin-top: 16px;
 }
 .dashboard__label {
-  color: #909399;
+  color: #687589;
   font-size: 13px;
 }
 .dashboard__value {
   margin-top: 8px;
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 </style>

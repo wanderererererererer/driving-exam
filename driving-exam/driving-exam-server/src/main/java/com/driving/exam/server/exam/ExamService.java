@@ -57,12 +57,13 @@ public interface ExamService {
     /**
      * 考试中暂存单题答案。
      *
-     * <p>只校验**归属**与 {@code status=ONGOING}；<b>不拦截超时</b>（允许用户在网络延迟或超时边缘仍能写入，
-     * 超时由 {@code submit} 统一判定）。<b>不判分、不返回对错</b>。</p>
+     * <p>校验归属、{@code status=ONGOING}、题目属于当前试卷，并在服务端判定超时后先收尾再拒绝。
+     * <b>不判分、不返回对错</b>；请求延迟到达时以服务端时间为准。</p>
      *
      * @throws com.driving.exam.common.exception.BusinessException
      *         {@code EXAM_NOT_FOUND(2104)} 考试不存在或不属于当前用户；
-     *         {@code EXAM_SUBMITTED(2102)} 考试已交卷
+     *         {@code EXAM_SUBMITTED(2102)} 考试已交卷/已超时；
+     *         {@code PARAM_ERROR(1001)} 题目不属于当前试卷
      */
     void answer(Long userId, Long examId, ExamAnswerDTO dto);
 
@@ -106,4 +107,15 @@ public interface ExamService {
      * @param pageSize 后端会强制上限（默认 20）
      */
     PageResult<ExamRecordVO> history(Long userId, String subjectCode, int pageNum, int pageSize);
+
+    /**
+     * 扫描并收尾已超时的进行中考试（供定时任务调用）。
+     *
+     * <p>逐场调用现有 {@link ExamFinalizer}，由其条件抢占保证与手动交卷并发时只有一方结算。
+     * 本方法不是用户接口，不改变任何人的考试归属；只处理服务端已经超过截止时间的考试。</p>
+     *
+     * @param limit 单次最多处理多少场
+     * @return 实际完成收尾的场次数
+     */
+    int finalizeExpiredExams(int limit);
 }

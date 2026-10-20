@@ -3,8 +3,10 @@ package com.driving.exam.server.coach;
 import com.driving.exam.common.result.PageResult;
 import com.driving.exam.pojo.dto.StudentBindDTO;
 import com.driving.exam.pojo.dto.StudentUpdateDTO;
+import com.driving.exam.pojo.enums.WrongBookCategory;
 import com.driving.exam.pojo.vo.StudentVO;
 import com.driving.exam.pojo.vo.SubjectStatusVO;
+import com.driving.exam.pojo.vo.WrongBookItemVO;
 
 import java.util.List;
 
@@ -12,7 +14,7 @@ import java.util.List;
  * 教练端 · 学员管理 Service（{@code /api/coach/students}）。
  *
  * <p>教练对自己<b>名下有效绑定</b>（{@code coach_student.status = 1}）的学员进行：查看列表、
- * 绑定或创建学员、改科目阶段 / 备注、解绑、查看各科状态详情。</p>
+ * 绑定或创建学员、改科目阶段 / 备注、解绑、查看各科状态详情、查看学习数据、查看错题数据。</p>
  *
  * <p>差异于 {@code QuestionService} 等实体 Service：本接口是**业务流程 Service**，
  * 不继承 {@code IService}（与 {@code AppointmentService} / {@code ExamService} 同类）。</p>
@@ -151,4 +153,126 @@ public interface CoachStudentService {
      *         {@code BINDING_NOT_FOUND(3102)} 绑定不存在 / 不属于当前教练 / 已解绑
      */
     List<SubjectStatusVO> listStudentStatus(Long coachId, Long bindId);
+
+    /**
+     * 学员学习数据（教练端，只读）。
+     *
+     * <p>先按 {@code coach_student.id + coach_id + status = 1} 做归属校验；不存在 / 不属于当前教练 /
+     * 已解绑一律 {@code BINDING_NOT_FOUND(3102)}。{@code studentId} 只能从该绑定记录反查。</p>
+     *
+     * <p>统计口径全部复用既有 Service：</p>
+     * <ul>
+     *   <li>总览/正确率/薄弱知识点 → {@code AnalysisService}；</li>
+     *   <li>错题分类数量 → {@code WrongBookService.summary}；</li>
+     *   <li>已结束模拟考试 → {@code ExamService.history}（分页与排序沿用考试历史接口）。</li>
+     * </ul>
+     *
+     * <p>既有分析/考试历史接口均按科目统计，因此 {@code subjectCode} 必填；
+     * 取值必须为 SUBJECT_1~SUBJECT_4，否则 {@code PARAM_ERROR(1001)}。本方法只读，不加事务。</p>
+     *
+     * @param coachId    当前登录教练（取 JWT，不接受前端传参）
+     * @param bindId     绑定记录 ID（{@code coach_student.id}）
+     * @param subjectCode 科目编码（SUBJECT_1~SUBJECT_4）
+     * @param pageNum    模拟考试历史页码（从 1 开始）
+     * @param pageSize   模拟考试历史每页条数
+     * @return 学员学习数据；无考试/错题/薄弱知识点时返回空值或空列表
+     * @throws com.driving.exam.common.exception.BusinessException
+     *         {@code BINDING_NOT_FOUND(3102)} 绑定不存在 / 不属于当前教练 / 已解绑；
+     *         {@code PARAM_ERROR(1001)} subjectCode 非法
+     */
+    LearningDataVO getLearningData(Long coachId, Long bindId, String subjectCode,
+                                   int pageNum, int pageSize);
+
+    /**
+     * 学员错题数据（教练端，只读，分页）。
+     *
+     * <p>先按 {@code coach_student.id + coach_id + status = 1} 做归属校验；不存在 / 不属于当前教练 /
+     * 已解绑一律 {@code BINDING_NOT_FOUND(3102)}，且不会调用错题查询服务。{@code studentId}
+     * 只能从该绑定记录反查，不接受前端传入。</p>
+     *
+     * <p>列表、分类口径、排序全部复用 {@code WrongBookService.list}，等价于学员端
+     * {@code GET /api/student/wrong-book}；本方法只读，不修改任何错题记录。</p>
+     *
+     * <p>分页按教练端既有规则归一化：页码最小 1，每页默认 10、上限 20。</p>
+     *
+     * @param coachId     当前登录教练（取 JWT，不接受前端传参）
+     * @param bindId      绑定记录 ID（{@code coach_student.id}）
+     * @param subjectCode 可选科目过滤；null/空白表示全部
+     * @param category    可选分类：MASTERED / HIGH_FREQUENCY / PENDING；null 表示全部
+     * @param pageNum     页码（小于 1 按 1）
+     * @param pageSize    每页条数（小于 1 按 10，最大 20）
+     * @return 错题分页；无数据时返回 total=0 的空分页，不是错误
+     * @throws com.driving.exam.common.exception.BusinessException
+     *         {@code BINDING_NOT_FOUND(3102)} 绑定不存在 / 不属于当前教练 / 已解绑
+     */
+    PageResult<WrongBookItemVO> listStudentWrongBook(Long coachId, Long bindId, String subjectCode,
+                                                     WrongBookCategory category,
+                                                     int pageNum, int pageSize);
+
+    /**
+     * 生成并保存学员 AI 学习建议（教练端）。
+     *
+     * <p>先按 {@code coach_student.id + coach_id + status = 1} 做归属校验；失败统一 3102，
+     * 且不会调用 AI/分析/错题服务。建议按科目写入 {@code student_subject_status}：</p>
+     * <ul>
+     *   <li>规则建议 → {@code exam_ready_suggest}；</li>
+     *   <li>AI 成功文本 → {@code ai_suggest} + {@code ai_suggest_time}；</li>
+     *   <li>新建议生成时重置 {@code coach_confirm_status} 为 NULL。</li>
+     * </ul>
+     *
+     * <p>AI 失败（4001/4002/4003）时返回规则建议，{@code source=RULE}、{@code aiSuccess=false}、
+     * {@code degraded=true}，不会把规则文本写成 AI 成功结果。</p>
+     *
+     * @param coachId     当前登录教练（取 JWT，不接受前端传参）
+     * @param bindId      绑定记录 ID（{@code coach_student.id}）
+     * @param subjectCode 科目编码（SUBJECT_1~SUBJECT_4）
+     * @return 建议内容与来源/降级标识
+     * @throws com.driving.exam.common.exception.BusinessException
+     *         {@code BINDING_NOT_FOUND(3102)} 绑定不存在 / 不属于当前教练 / 已解绑；
+     *         {@code PARAM_ERROR(1001)} subjectCode 非法
+     */
+    AiSuggestVO generateAiSuggest(Long coachId, Long bindId, String subjectCode);
+
+    /**
+     * 读取已保存的学员学习建议（教练端，只读）。
+     *
+     * <p>先做绑定归属校验（失败统一 3102），再读取 {@code student_subject_status}：
+     * 不调用 DeepSeek、不生成规则建议、不写入数据库、不重置确认状态。</p>
+     *
+     * <p>来源语义（数据库没有独立 source 列）：</p>
+     * <ul>
+     *   <li>{@code ai_suggest} 非空 → {@code source=AI}；</li>
+     *   <li>{@code ai_suggest} 为空但 {@code exam_ready_suggest} 非空 → {@code source=RULE}；
+     *       历史规则建议只保存了等级，完整文本未持久化，因此 {@code suggestion=null}；</li>
+     *   <li>两者都为空 / 行不存在 → 返回 {@code null}，表示尚无已保存建议。</li>
+     * </ul>
+     *
+     * <p>{@code coachConfirmStatus} 原样读取；本方法绝不修改它。</p>
+     *
+     * @param coachId     当前登录教练（取 JWT）
+     * @param bindId      绑定记录 ID（{@code coach_student.id}）
+     * @param subjectCode 科目编码（SUBJECT_1~SUBJECT_4）
+     * @return 已保存建议；无建议时为 null
+     * @throws com.driving.exam.common.exception.BusinessException
+     *         {@code BINDING_NOT_FOUND(3102)} 绑定不存在 / 不属于当前教练 / 已解绑；
+     *         {@code PARAM_ERROR(1001)} subjectCode 非法
+     */
+    AiSuggestVO getSavedAiSuggest(Long coachId, Long bindId, String subjectCode);
+
+    /**
+     * 教练独立确认/修改当前学习建议状态（教练端）。
+     *
+     * <p>先做绑定归属校验（失败统一 3102）。确认状态不依赖 AI/规则建议是否存在：
+     * 没有建议行时会创建确认行；已有确认时允许修改为新的确认值。本操作只改
+     * {@code coach_confirm_status}，不触发 AI、不修改建议文本/时间。</p>
+     *
+     * @param coachId       当前登录教练（取 JWT）
+     * @param bindId        绑定记录 ID（{@code coach_student.id}）
+     * @param subjectCode   科目编码（SUBJECT_1~SUBJECT_4）
+     * @param confirmStatus CONFIRMED_READY / NOT_READY / NEED_HELP
+     * @throws com.driving.exam.common.exception.BusinessException
+     *         {@code BINDING_NOT_FOUND(3102)} 绑定不存在 / 不属于当前教练 / 已解绑；
+     *         {@code PARAM_ERROR(1001)} subjectCode 或 confirmStatus 非法
+     */
+    void confirmSuggestion(Long coachId, Long bindId, String subjectCode, String confirmStatus);
 }

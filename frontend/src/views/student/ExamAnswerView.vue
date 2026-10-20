@@ -12,7 +12,8 @@ import type { ExamReportVO, ExamVO, QuestionVO } from '@/types'
  * <ul>
  *   <li><b>服务器暂存</b>：选项变化后调用 `POST /exam/{examId}/answer`（`ExamAnswerDTO`）；</li>
  *   <li><b>服务器恢复</b>：进入/刷新时用 `GET /exam/{examId}` 的 `answeredMap` 回填；</li>
- *   <li><b>倒计时</b>：以 `remainingSeconds` 为起点，归零即停并提示（不自动交卷）。</li>
+ *   <li><b>倒计时</b>：以 `remainingSeconds` 为起点；归零后锁定作答并自动请求交卷，
+ *       后端定时任务也会独立收尾，避免客户端关闭/延迟导致考试长期停留 ONGOING。</li>
  * </ul>
  *
  * <p><b>防作弊</b>：题目不含答案/解析，本页也不展示正确答案。</p>
@@ -20,7 +21,7 @@ import type { ExamReportVO, ExamVO, QuestionVO } from '@/types'
  * <p><b>保存并发</b>：后端 upsert 无版本号、后到者胜 → 本页对**同一题**用"收敛循环 + 哨兵"串行化
  * （{@link ensureSaved}），确保新答案不会被旧请求覆盖。</p>
  *
- * <p>范围外：成绩报告**页**（交卷后按页面既有的「已结束」状态展示，不新建报告页）。</p>
+ * <p>范围：答题、服务器暂存、倒计时、交卷和成绩汇总；逐题报告由独立报告页展示。</p>
  */
 const route = useRoute()
 const router = useRouter()
@@ -72,6 +73,8 @@ const isMultiple = computed(() => currentQuestion.value?.questionType === 'MULTI
 const remainingSeconds = ref<number | null>(null)
 /** 时间已到（前端状态，不代表后端已交卷） */
 const timeUp = ref(false)
+/** 超时自动交卷失败，允许用户手动重试 */
+const timeUpSubmitError = ref(false)
 let timerId: number | null = null
 
 /** 是否禁止作答：考试已结束 或 时间已到 */
@@ -84,11 +87,13 @@ function stopTimer(): void {
   }
 }
 
-/** 时间到：停止计时并置位（不修改后端状态、不交卷） */
+/** 时间到：停止计时、锁定作答，并立即请求后端交卷；后端仍会以服务端时间再次判定超时。 */
 function markTimeUp(): void {
   stopTimer()
   remainingSeconds.value = 0
   timeUp.value = true
+  timeUpSubmitError.value = false
+  void submitExam(false)
 }
 
 /** 用后端返回的剩余秒数重置并启动计时（单实例：先清后建） */
@@ -229,6 +234,7 @@ async function load(): Promise<void> {
   }
   loading.value = true
   loadError.value = false
+  timeUpSubmitError.value = false
   try {
     const vo = await getExamApi(id)
     exam.value = vo
@@ -357,7 +363,7 @@ function goPrev(): void {
  * （保留答案，可再点「下一题」重试）；连点由 {@code advancing} 兜底，避免重复判题 / 乱序推进。</p>
  */
 async function goNext(): Promise<void> {
-  if (advancing.value) return // 防连点/重复判题
+  if (locked.value || advancing.value) return // 超时/已结束后不再判题或推进
   if (currentIndex.value >= total.value - 1) return // 已是最后一题
   const q = currentQuestion.value
   if (q && answers.has(q.id)) {
@@ -389,38 +395,51 @@ async function judgeOne(questionId: number): Promise<void> {
 /**
  * 交卷。
  *
- * <p>答案已逐题存到服务器，交卷请求 body 为空 → 后端从草稿读答案并**统一判分**（幂等；是否超时由后端判定）。
- * 成功后：停止计时、提示得分/是否及格、切入页面**既有的「已结束」状态**（复用现成 UI，**不新建成绩报告页**）。
- * 失败：由请求拦截器统一提示，按钮恢复可再次点击——**不静默、不伪造成功**。</p>
+ * <p>答案已逐题存到服务器，交卷请求 body 为空 → 后端从草稿读答案并统一判分（幂等；是否超时由后端判定）。
+ * 成功后：停止计时、提示得分/是否及格、切入页面既有的「已结束」状态，并提供逐题报告入口。
+ * 失败：由请求拦截器统一提示，按钮恢复可再次点击；超时自动交卷失败时保留重试入口。</p>
  */
-async function submitExam(): Promise<void> {
+async function submitExam(confirm = true): Promise<void> {
   const e = exam.value
   if (!e || !ongoing.value || submitting.value) return
 
-  try {
-    await ElMessageBox.confirm('确定要交卷吗？交卷后不可再修改答案。', '交卷确认', {
-      type: 'warning',
-      confirmButtonText: '交卷',
-      cancelButtonText: '继续答题',
-    })
-  } catch {
-    return // 用户取消
+  if (confirm) {
+    try {
+      await ElMessageBox.confirm('确定要交卷吗？交卷后不可再修改答案。', '交卷确认', {
+        type: 'warning',
+        confirmButtonText: '交卷',
+        cancelButtonText: '继续答题',
+      })
+    } catch {
+      return // 用户取消
+    }
   }
 
   submitting.value = true
+  timeUpSubmitError.value = false
   try {
     const rpt = await submitExamApi(examId.value)
     stopTimer()
-    // 直接用交卷响应作为成绩（不重复请求）；并切到「已结束」状态，页面主体持续显示成绩
+    // 直接用交卷响应作为成绩（不重复请求）；并切到「已结束」状态
     report.value = rpt
     reportError.value = false
-    exam.value = { ...e, status: 'SUBMITTED' }
-    ElMessage.success('已交卷，成绩已生成')
+    exam.value = { ...e, status: timeUp.value ? 'TIMEOUT' : 'SUBMITTED' }
+    ElMessage.success(timeUp.value ? '时间已到，已自动交卷' : '已交卷，成绩已生成')
   } catch {
-    // 交卷失败：拦截器已弹提示；按钮可再次点击
+    // 交卷失败：拦截器已弹提示；超时场景保留手动重试入口
+    timeUpSubmitError.value = timeUp.value
   } finally {
     submitting.value = false
   }
+}
+
+/** 查看本场逐题报告 */
+function goReport(): void {
+  const sc = String(route.query.subjectCode ?? '')
+  router.push({
+    path: `/student/exam/${examId.value}/report`,
+    query: sc ? { subjectCode: sc } : {},
+  })
 }
 function jumpTo(i: number): void {
   currentIndex.value = i
@@ -526,7 +545,8 @@ const progressText = computed(() =>
             <span>及格线 <b>{{ report.passScore }}</b></span>
           </div>
           <div class="ea__result-actions">
-            <el-button type="primary" @click="goBack">返回考试列表</el-button>
+            <el-button type="primary" @click="goReport">查看逐题报告</el-button>
+            <el-button @click="goBack">返回考试列表</el-button>
           </div>
         </template>
 
@@ -550,15 +570,21 @@ const progressText = computed(() =>
           </span>
         </div>
 
-        <!-- 时间已到：明确提示、等待交卷流程 -->
+        <!-- 时间已到：锁定作答并自动交卷；失败时保留手动重试入口 -->
         <el-alert
           v-if="timeUp"
           class="ea__banner"
           type="error"
           :closable="false"
           show-icon
-          title="考试时间已到"
-          description="已停止计时。交卷流程将在下一阶段接入；当前不可继续作答。"
+          :title="timeUpSubmitError ? '考试时间已到，自动交卷失败' : '考试时间已到'"
+          :description="
+            timeUpSubmitError
+              ? '自动交卷未成功，请点击下方「交卷」重试；答案已按服务器暂存内容结算。'
+              : submitting
+                ? '正在自动交卷，请稍候…'
+                : '已自动交卷，当前不可继续作答。'
+          "
         />
 
         <!-- 保存状态汇总 -->
@@ -707,20 +733,20 @@ const progressText = computed(() =>
 .ea__title {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .ea__progress {
   margin-left: auto;
   font-size: 14px;
-  color: #606266;
+  color: #4a5a70;
 }
 .ea__clock {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  color: #409eff;
+  color: #7597d5;
 }
 .ea__clock.is-low {
-  color: #f56c6c;
+  color: #c96a6a;
 }
 .ea__banner {
   margin-bottom: 16px;
@@ -742,27 +768,27 @@ const progressText = computed(() =>
 }
 .ea__diff {
   font-size: 12px;
-  color: #909399;
+  color: #687589;
 }
 .ea__save {
   font-size: 12px;
   padding: 1px 8px;
   border-radius: 10px;
-  background: #f0f2f5;
-  color: #909399;
+  background: #f1f4f9;
+  color: #687589;
 }
 .ea__save.is-saved {
-  background: #f0f9eb;
-  color: #67c23a;
+  background: #edf7f1;
+  color: #5bae7b;
 }
 .ea__save.is-dirty,
 .ea__save.is-saving {
-  background: #fdf6ec;
-  color: #e6a23c;
+  background: #fbf4e8;
+  color: #c98f4a;
 }
 .ea__save.is-error {
-  background: #fef0f0;
-  color: #f56c6c;
+  background: #fbeded;
+  color: #c96a6a;
 }
 .ea__content {
   font-size: 16px;
@@ -785,7 +811,7 @@ const progressText = computed(() =>
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid #dce3ec;
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
@@ -798,7 +824,7 @@ const progressText = computed(() =>
   line-height: 24px;
   text-align: center;
   border-radius: 50%;
-  background: #f0f2f5;
+  background: #f1f4f9;
   font-size: 13px;
 }
 .ea__option-text {
@@ -806,8 +832,8 @@ const progressText = computed(() =>
   line-height: 1.6;
 }
 .ea__option:not(.is-locked):hover {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: #7597d5;
+  background: #e8effb;
 }
 /* 判断题：两列并排、等宽，整体收窄，避免两个按钮占满页面 */
 .ea__judge {
@@ -820,19 +846,19 @@ const progressText = computed(() =>
   text-align: center;
   padding: 11px 0;
   font-size: 15px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid #dce3ec;
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
   transition: all 0.15s;
 }
 .ea__judge-btn:not(.is-locked):hover {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: #7597d5;
+  background: #e8effb;
 }
 .is-picked {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: #7597d5;
+  background: #e8effb;
 }
 .is-locked {
   cursor: default;
@@ -841,7 +867,7 @@ const progressText = computed(() =>
 .ea__hint {
   margin-top: 12px;
   font-size: 12px;
-  color: #909399;
+  color: #687589;
 }
 .ea__nav {
   margin-top: 16px;
@@ -858,11 +884,11 @@ const progressText = computed(() =>
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .ea__result-sub {
   margin: 6px 0 20px;
-  color: #909399;
+  color: #687589;
 }
 .ea__result-skel {
   max-width: 420px;
@@ -878,11 +904,11 @@ const progressText = computed(() =>
   font-size: 56px;
   font-weight: 700;
   line-height: 1;
-  color: #409eff;
+  color: #7597d5;
 }
 .ea__score-total {
   font-size: 20px;
-  color: #606266;
+  color: #4a5a70;
 }
 .ea__pass {
   margin-top: 12px;
@@ -893,11 +919,11 @@ const progressText = computed(() =>
   flex-wrap: wrap;
   justify-content: center;
   gap: 12px 24px;
-  color: #606266;
+  color: #4a5a70;
   font-size: 14px;
 }
 .ea__counts b {
-  color: #303133;
+  color: #263449;
 }
 .ea__result-actions {
   margin-top: 24px;
@@ -922,7 +948,7 @@ const progressText = computed(() =>
 .ea__card-title {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
   margin-bottom: 12px;
 }
 .ea__grid {
@@ -937,12 +963,12 @@ const progressText = computed(() =>
   justify-content: center;
   width: 34px;
   height: 34px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid #dce3ec;
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
-  color: #606266;
+  color: #4a5a70;
   transition: all 0.15s;
 }
 .ea__cell-num {
@@ -954,40 +980,40 @@ const progressText = computed(() =>
   line-height: 1;
 }
 .ea__cell:hover {
-  border-color: #409eff;
+  border-color: #7597d5;
 }
 /* 已作答但未判题：中性灰（区别于白色"未答"） */
 .ea__cell.is-answered {
-  background: #f4f4f5;
-  border-color: #dcdfe6;
-  color: #909399;
+  background: #f2f4f7;
+  border-color: #dce3ec;
+  color: #687589;
 }
 /* 蓝：答对 */
 .ea__cell.is-correct {
-  border-color: #409eff;
-  background: #ecf5ff;
-  color: #409eff;
+  border-color: #7597d5;
+  background: #e8effb;
+  color: #7597d5;
 }
 /* 红：答错 */
 .ea__cell.is-wrong {
-  border-color: #f56c6c;
-  background: #fef0f0;
-  color: #f56c6c;
+  border-color: #c96a6a;
+  background: #fbeded;
+  color: #c96a6a;
 }
 /* 待保存 / 保存失败：橙（与正误的蓝/红区分） */
 .ea__cell.is-pending {
-  border-color: #e6a23c;
-  color: #e6a23c;
+  border-color: #c98f4a;
+  color: #c98f4a;
 }
 .ea__cell.is-error {
-  border-color: #e6a23c;
+  border-color: #c98f4a;
   border-style: dashed;
-  color: #e6a23c;
+  color: #c98f4a;
 }
 /* 当前题：用蓝环（非填充），保证正误底色仍可见 */
 .ea__cell.is-current {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.35);
+  border-color: #7597d5;
+  box-shadow: 0 0 0 2px rgba(117, 151, 213, 0.28);
 }
 .ea__legend {
   margin-top: 14px;
@@ -995,7 +1021,7 @@ const progressText = computed(() =>
   flex-wrap: wrap;
   gap: 12px;
   font-size: 12px;
-  color: #909399;
+  color: #687589;
 }
 .ea__legend span {
   display: inline-flex;
@@ -1007,23 +1033,23 @@ const progressText = computed(() =>
   width: 12px;
   height: 12px;
   border-radius: 3px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid #dce3ec;
 }
 .ea__dot.is-answered {
-  background: #f4f4f5;
+  background: #f2f4f7;
 }
 .ea__dot.is-correct {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: #7597d5;
+  background: #e8effb;
 }
 .ea__dot.is-wrong {
-  border-color: #f56c6c;
-  background: #fef0f0;
+  border-color: #c96a6a;
+  background: #fbeded;
 }
 .ea__dot.is-current {
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.35);
+  box-shadow: 0 0 0 2px rgba(117, 151, 213, 0.28);
 }
 .ea__dot.is-error {
-  border-color: #e6a23c;
+  border-color: #c98f4a;
 }
 </style>

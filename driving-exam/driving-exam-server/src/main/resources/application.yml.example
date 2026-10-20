@@ -10,7 +10,7 @@
 #   export JWT_SECRET='<随机长字符串>'
 #
 # 安全约定：
-#   - 本文件**不含任何真实凭据**；下方 5 个敏感项均为【无默认值】环境变量占位符。
+#   - 本文件**不含任何真实凭据**；下方敏感项均为【无默认值】环境变量占位符。
 #   - 真正的 application.yml 已被 .gitignore 排除，请勿提交。
 # ============================================================
 
@@ -20,6 +20,10 @@ server:
 spring:
   application:
     name: driving-exam-server
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     # 数据库连接：全部改为无默认值环境变量（缺失即启动失败，绝不回退真实口令）
@@ -72,3 +76,45 @@ jwt:
 logging:
   level:
     com.driving.exam: debug
+
+# ============================================================
+# RAG Embedding（SiliconFlow BGE-M3）—— 仅当启用 RAG 时需要
+# 真实 Key 仅置于本机环境变量 SILICONFLOW_API_KEY，勿写入本文件
+# ============================================================
+embedding:
+  # 无默认值占位：缺环境变量时为空，客户端调用前判空并报错（不影响应用启动）
+  api-key: ${SILICONFLOW_API_KEY:}
+  base-url: https://api.siliconflow.cn/v1
+  model: BAAI/bge-m3
+  encoding-format: float
+  connect-timeout: 5000
+  read-timeout: 30000
+
+# ============================================================
+# RAG 向量库（Qdrant REST）—— 仅当启用 RAG 时使用；本地可无鉴权
+# api-key 如需则仅通过环境变量 QDRANT_API_KEY 提供（勿写真实值）
+# vector-size 固定为 1024：依据 2026-10-18 已完成的 BGE-M3 真实 Embedding
+#   与 Qdrant 写入/检索验证（R2.4 / R3），入库与检索共用该维度配置。
+# collection 当前为已入库验证的开发集合 driving_exam_kb_dev（39 个点）；
+#    ⚠️ 这是当前项目阶段的安全默认选择，不代表已批准生产部署方案——
+#    正式部署或切换数据源前必须重新确认目标集合；严禁指向集成测试集合
+#    driving_exam_kb_it（保持为空），生产集合 driving_exam_kb 的启用需单独评审。
+# ============================================================
+qdrant:
+  base-url: http://localhost:6333
+  api-key: ${QDRANT_API_KEY:}
+  # 当前阶段已验证的开发集合（正式切换前必须重新确认）
+  collection: driving_exam_kb_dev
+  vector-size: 1024
+  distance: Cosine
+  connect-timeout: 5000
+  read-timeout: 30000
+
+# ============================================================
+# 模拟考试超时收尾（定时任务）
+# enabled=false 可用于集成测试；生产默认开启。
+# ============================================================
+exam:
+  timeout-scan-enabled: true
+  timeout-scan-ms: 60000
+  timeout-scan-initial-ms: 30000

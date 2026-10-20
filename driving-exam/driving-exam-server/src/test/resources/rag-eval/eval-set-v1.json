@@ -1,0 +1,269 @@
+{
+  "version": "v1",
+  "frozenAt": "2026-10-18",
+  "description": "RAG 检索质量评估集（当前 SUBJECT_1 语料；27 条 = 26 条 gold 样本 + 1 条负样本）。评估集在检索执行前冻结，不得依据实际检索结果修改。gold 来源均经种子解析原文逐条核验；expectedTexts 为对应 question.analysis 原文（用于内容命中补充指标），standardAnswers 仅为题目标准答案背景，不参与任何指标计算。",
+  "samples": [
+    {
+      "evalId": "E01", "query": "红灯亮了应该怎么走", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [1], "goldType": "exact",
+      "standardAnswers": {"1": "A"},
+      "rationale": "#1 解析直接给出红灯亮时禁止通行、应在停止线外停车等候的规则，足以回答。",
+      "confusionNotes": "#2 绿灯规则（曾在真实测试中抢 top1）；#20 为红灯右转例外，仅部分相关。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"1": "红灯亮时禁止通行，车辆应在停止线外停车等候。"}
+    },
+    {
+      "evalId": "E02", "query": "路口黄灯一直闪，还能通过吗", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [21], "goldType": "semantic",
+      "standardAnswers": {"21": "A"},
+      "rationale": "#21 解析说明黄灯闪烁属警示信号、确保安全可通行，直接回答。",
+      "confusionNotes": "#3/#30 是黄灯常亮（越线）规则，不是闪烁场景。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"21": "黄灯闪烁是一种警示信号，车辆、行人在确保安全的原则下可以通行。"}
+    },
+    {
+      "evalId": "E03", "query": "黄灯亮时车已经越过停止线怎么办", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [3, 14, 30], "goldType": "multi",
+      "standardAnswers": {"3": "A", "14": "对", "30": "对"},
+      "rationale": "#3 与 #14 解析逐字相同，均为“已越过停止线可以继续通行”；#30 同时包含未越线停车、越线继续的完整规则。三条均足以回答。",
+      "confusionNotes": "#3 与 #14 文本重复（保留为两个独立来源 ID，重复问题由补充指标度量）。",
+      "duplicateNotes": "ID 3 与 ID 14 解析文本逐字相同。",
+      "expectedTexts": {
+        "3": "黄灯亮时，已越过停止线的车辆可以继续通行。",
+        "14": "黄灯亮时，已越过停止线的车辆可以继续通行。",
+        "30": "黄灯亮时，未越过停止线的车辆应停车等待；已越过停止线的可以继续通行。"
+      }
+    },
+    {
+      "evalId": "E04", "query": "红灯时右转可以吗", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [20], "goldType": "exact",
+      "standardAnswers": {"20": "A"},
+      "rationale": "#20 解析直接给出红灯右转在不妨碍被放行车辆、行人时可行的规则。",
+      "confusionNotes": "#15 解析为“符合……关于右转的规定”，不含具体规则，属弱文本源，不纳入 gold。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"20": "红灯亮时，右转弯车辆在不妨碍被放行的车辆、行人通行的情况下可以通行。"}
+    },
+    {
+      "evalId": "E05", "query": "交通信号灯有哪几种颜色，各表示什么", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [25], "goldType": "exact",
+      "standardAnswers": {"25": "ABC"},
+      "rationale": "#25 解析完整给出红/绿/黄三色及各自含义。",
+      "confusionNotes": "#2 仅绿灯含义，覆盖不全。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"25": "交通信号灯由红灯、绿灯、黄灯组成，分别表示禁止通行、准许通行和警示。"}
+    },
+    {
+      "evalId": "E06", "query": "红色叉形灯亮起时本车道能不能走", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [4], "goldType": "exact",
+      "standardAnswers": {"4": "B"},
+      "rationale": "#4 解析直接规则：红色叉形灯或箭头灯亮时禁止本车道通行。",
+      "confusionNotes": "#31 为绿色箭头灯（相反情形）。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"4": "红色叉形灯或箭头灯亮时，禁止本车道车辆通行。"}
+    },
+    {
+      "evalId": "E07", "query": "绿色箭头灯指示的方向可以通行吗", "subjectCode": "SUBJECT_1", "category": "信号灯",
+      "expectedSourceIds": [31], "goldType": "exact",
+      "standardAnswers": {"31": "对"},
+      "rationale": "#31 解析直接规则：绿色箭头灯亮时准许按箭头方向通行。",
+      "confusionNotes": "#2 绿灯一般规则（未区分箭头）。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"31": "绿色箭头灯亮时，准许车辆按箭头所示方向通行。"}
+    },
+    {
+      "evalId": "E08", "query": "警告标志一般是什么形状", "subjectCode": "SUBJECT_1", "category": "标志标线",
+      "expectedSourceIds": [5], "goldType": "exact",
+      "standardAnswers": {"5": "A"},
+      "rationale": "#5 解析直接给出警告标志为等边三角形的形状规则。",
+      "confusionNotes": "#26 列举警告标志种类但不含形状。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"5": "警告标志为等边三角形，用以警告车辆、行人注意危险地点。"}
+    },
+    {
+      "evalId": "E09", "query": "禁令标志是什么颜色", "subjectCode": "SUBJECT_1", "category": "标志标线",
+      "expectedSourceIds": [6], "goldType": "exact",
+      "standardAnswers": {"6": "Ａ"},
+      "rationale": "#6 解析直接给出禁令标志红底白图案的颜色规则。",
+      "confusionNotes": "#22 为指示标志颜色（蓝底白图案）。",
+      "duplicateNotes": "解析末尾含测试说明噪点句（原样入库），属语料质量观察项。",
+      "expectedTexts": {"6": "禁令标志一般为红底白图案，用以禁止或限制车辆、行人交通行为。（本题标准答案故意写成全角 A，用于验证判分归一化）"}
+    },
+    {
+      "evalId": "E10", "query": "蓝底白图案的指示标志是什么意思", "subjectCode": "SUBJECT_1", "category": "标志标线",
+      "expectedSourceIds": [22], "goldType": "semantic",
+      "standardAnswers": {"22": "A"},
+      "rationale": "#22 解析直接给出指示标志蓝底白图案及指示用途。",
+      "confusionNotes": "#6 为禁令标志颜色（红底）。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"22": "指示标志一般为蓝底白图案，用以指示车辆、行人按规定方向、地点行驶。"}
+    },
+    {
+      "evalId": "E11", "query": "道路中间的黄色虚线可以跨越超车吗", "subjectCode": "SUBJECT_1", "category": "标志标线",
+      "expectedSourceIds": [23], "goldType": "exact",
+      "standardAnswers": {"23": "B"},
+      "rationale": "#23 解析给出黄色虚线在保证安全时可跨越超车/转弯，并对比黄实线禁止跨越。",
+      "confusionNotes": "#32 为黄色实线（禁止跨越）。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"23": "黄色虚线用于分隔对向行驶的交通流，在保证安全的前提下可以跨越超车或转弯；黄色实线则禁止跨越。"}
+    },
+    {
+      "evalId": "E12", "query": "黄色实线能不能压", "subjectCode": "SUBJECT_1", "category": "标志标线",
+      "expectedSourceIds": [32], "goldType": "exact",
+      "standardAnswers": {"32": "对"},
+      "rationale": "#32 解析直接规则：黄色实线禁止跨越、不得压线行驶。",
+      "confusionNotes": "#23 为黄色虚线（可跨越）。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"32": "黄色实线为禁止跨越对向车行道分界线，车辆不得跨越超车或压线行驶。"}
+    },
+    {
+      "evalId": "E13", "query": "白色虚线表示什么", "subjectCode": "SUBJECT_1", "category": "标志标线",
+      "expectedSourceIds": [33], "goldType": "exact",
+      "standardAnswers": {"33": "对"},
+      "rationale": "#33 解析直接给出白色虚线用于分隔同向车流、可跨越变换车道。",
+      "confusionNotes": "#23 为黄色虚线（分隔对向车流）。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"33": "白色虚线用于分隔同向行驶的交通流，可以跨越变换车道。"}
+    },
+    {
+      "evalId": "E14", "query": "开车系安全带有什么作用", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [7], "goldType": "exact",
+      "standardAnswers": {"7": "B"},
+      "rationale": "#7 解析直接说明安全带在碰撞中约束乘员、减轻伤害的作用。",
+      "confusionNotes": "#13 仅讲法律要求，未讲作用。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"7": "安全带能在发生碰撞时约束乘员身体，减轻伤害。"}
+    },
+    {
+      "evalId": "E15", "query": "开车时打电话算违法吗", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [8, 16], "goldType": "multi",
+      "standardAnswers": {"8": "AB", "16": "错"},
+      "rationale": "#8 与 #16 解析均明确驾驶时拨打接听手持电话属违法，各自独立充分。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "无",
+      "expectedTexts": {
+        "8": "驾驶时拨打接听手持电话、观看视频均属违法且极其危险。",
+        "16": "驾驶时拨打接听手持电话属违法行为。"
+      }
+    },
+    {
+      "evalId": "E16", "query": "雨天开车要注意什么", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [9], "goldType": "exact",
+      "standardAnswers": {"9": "A,B"},
+      "rationale": "#9 解析给出雨天路滑、视线差时应降速并加大跟车距离的要点。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "解析末尾含测试说明噪点句（原样入库），属语料质量观察项。",
+      "expectedTexts": {"9": "雨天路滑、视线差，应降低车速并加大跟车距离。（本题标准答案故意带分隔符，用于验证归一化）"}
+    },
+    {
+      "evalId": "E17", "query": "高速上能见度低时怎么限速", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [24], "goldType": "semantic",
+      "standardAnswers": {"24": "A"},
+      "rationale": "#24 解析给出能见度 200/100/50 米对应的 60/40/20km/h 限速阈值与驶离要求，规则完整（解析未出现“高速”字样，仅题干语境涉及；文本口径限制已记录）。",
+      "confusionNotes": "#12 为一般超速规定，不含能见度阈值。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"24": "能见度小于200米时车速不得超过60km/h；小于100米时不得超过40km/h；小于50米时不得超过20km/h并从最近出口驶离。"}
+    },
+    {
+      "evalId": "E18", "query": "开车感觉疲劳怎么办", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [18, 27], "goldType": "multi",
+      "standardAnswers": {"18": "对", "27": "ABC"},
+      "rationale": "#18 直接给出疲劳应休息；#27 夜间要点中明确“感觉疲劳时必须停车休息”，各自独立充分。",
+      "confusionNotes": "#27 主题为夜间行车，但内含疲劳规则。",
+      "duplicateNotes": "无",
+      "expectedTexts": {
+        "18": "疲劳会显著降低反应能力，应及时休息。",
+        "27": "夜间行车应按规定使用灯光、控制车速并加大跟车距离；感觉疲劳时必须停车休息，不得勉强行驶。"
+      }
+    },
+    {
+      "evalId": "E19", "query": "夜间行车应该注意什么", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [27], "goldType": "exact",
+      "standardAnswers": {"27": "ABC"},
+      "rationale": "#27 解析完整给出夜间灯光、车速、跟车距离与疲劳处置要点。",
+      "confusionNotes": "#18 仅疲劳单点。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"27": "夜间行车应按规定使用灯光、控制车速并加大跟车距离；感觉疲劳时必须停车休息，不得勉强行驶。"}
+    },
+    {
+      "evalId": "E20", "query": "前车排队时能借道超车吗", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [17], "goldType": "exact",
+      "standardAnswers": {"17": "错"},
+      "rationale": "#17 解析直接规则：遇前车停车排队或缓慢行驶时不得借道超车或穿插等候。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"17": "遇前车停车排队或缓慢行驶时，不得借道超车或者穿插等候。"}
+    },
+    {
+      "evalId": "E21", "query": "向车窗外扔东西违法吗", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [35], "goldType": "exact",
+      "standardAnswers": {"35": "错"},
+      "rationale": "#35 解析直接结论：向车外抛撒物品属违法行为。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"35": "向车外抛撒物品属违法行为，易危及他人安全，应坚决杜绝。"}
+    },
+    {
+      "evalId": "E22", "query": "倒车时要注意什么", "subjectCode": "SUBJECT_1", "category": "安全常识",
+      "expectedSourceIds": [36], "goldType": "exact",
+      "standardAnswers": {"36": "对"},
+      "rationale": "#36 解析给出倒车须查明车后情况确认安全，及禁止倒车地点。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"36": "倒车前必须查明车后情况，确认安全；在铁路道口、交叉路口、单行路等处不得倒车。"}
+    },
+    {
+      "evalId": "E23", "query": "交通信号都包括哪些内容", "subjectCode": "SUBJECT_1", "category": "交通信号总概念",
+      "expectedSourceIds": [19], "goldType": "semantic",
+      "standardAnswers": {"19": "A"},
+      "rationale": "#19 解析完整枚举交通信号的四类组成（信号灯/标志/标线/交警指挥），足以回答。",
+      "confusionNotes": "#29 解析仅为指代句（“这是……法定定义”），不含具体内容，属弱文本源，不纳入 gold。",
+      "duplicateNotes": "无",
+      "expectedTexts": {"19": "《道路交通安全法》规定，交通信号包括交通信号灯、交通标志、交通标线和交通警察的指挥。"}
+    },
+    {
+      "evalId": "E24", "query": "没有交通信号灯控制的路口怎样通行", "subjectCode": "SUBJECT_1", "category": "交叉路口通行与让行",
+      "expectedSourceIds": [11, 34], "goldType": "multi",
+      "standardAnswers": {"11": "ABC", "34": "对"},
+      "rationale": "#11 与 #34 解析均给出减速慢行、观察、让右方来车先行的规则，各自独立充分。",
+      "confusionNotes": "#11 属信号灯知识点、#34 属安全常识，内容同级充分。",
+      "duplicateNotes": "无",
+      "expectedTexts": {
+        "11": "应减速慢行、观察左右来车，并让右方道路来车先行，不得加速抢行。",
+        "34": "通过无控制的交叉路口，应当减速慢行、观察来往车辆，并让右方道路来车先行。"
+      }
+    },
+    {
+      "evalId": "E25", "query": "无控制路口要让哪边车先行", "subjectCode": "SUBJECT_1", "category": "交叉路口通行与让行",
+      "expectedSourceIds": [11, 34], "goldType": "semantic",
+      "standardAnswers": {"11": "ABC", "34": "对"},
+      "rationale": "#11 与 #34 均明确“让右方道路来车先行”。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "无",
+      "expectedTexts": {
+        "11": "应减速慢行、观察左右来车，并让右方道路来车先行，不得加速抢行。",
+        "34": "通过无控制的交叉路口，应当减速慢行、观察来往车辆，并让右方道路来车先行。"
+      }
+    },
+    {
+      "evalId": "E26", "query": "红灯亮时应当怎样通行", "subjectCode": "SUBJECT_1", "category": "多来源组合",
+      "expectedSourceIds": [1, 20], "goldType": "multi",
+      "standardAnswers": {"1": "A", "20": "A"},
+      "rationale": "复刻真实测试查询：#1 给出红灯停车规则、#20 给出右转例外，组合覆盖问题。",
+      "confusionNotes": "#2 绿灯规则为已知易混 top1 来源。",
+      "duplicateNotes": "无",
+      "expectedTexts": {
+        "1": "红灯亮时禁止通行，车辆应在停止线外停车等候。",
+        "20": "红灯亮时，右转弯车辆在不妨碍被放行的车辆、行人通行的情况下可以通行。"
+      }
+    },
+    {
+      "evalId": "E27", "query": "推荐一款好用的行车记录仪", "subjectCode": "SUBJECT_1", "category": "负样本",
+      "expectedSourceIds": [], "goldType": "negative",
+      "standardAnswers": {},
+      "rationale": "与驾考知识语料无关；无预期来源。仅观察返回条数与分数分布，不参与命中类指标。",
+      "confusionNotes": "无。",
+      "duplicateNotes": "无",
+      "expectedTexts": {}
+    }
+  ]
+}

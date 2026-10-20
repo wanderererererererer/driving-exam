@@ -158,8 +158,8 @@ function onNodeClick(node: KPTreeNodeVO) {
 .cpd__count {
   flex: none;
   font-size: 12px;
-  color: #909399;
-  background: #f4f4f5;
+  color: #687589;
+  background: #f2f4f7;
   border-radius: 8px;
   padding: 0 6px;
 }

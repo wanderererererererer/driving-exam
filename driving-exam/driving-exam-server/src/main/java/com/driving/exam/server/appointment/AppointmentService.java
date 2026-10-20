@@ -127,6 +127,18 @@ public interface AppointmentService {
                                                     int pageNum, int pageSize);
 
     /**
+     * 管理员端 · 全量预约只读列表（分页）。
+     *
+     * <p>仅管理员路径 `/api/admin/appointments` 使用；不按学员/教练身份收窄。
+     * 可按状态过滤，按创建时间倒序；姓名/电话一次 IN 装配。只读，不加事务。</p>
+     *
+     * @param status   状态过滤；null 表示全部
+     * @param pageNum  页码（小于 1 按 1）
+     * @param pageSize 每页条数（后端上限 20）
+     */
+    PageResult<AppointmentVO> listAllAppointments(AppointmentStatus status, int pageNum, int pageSize);
+
+    /**
      * 审批通过（教练端）。
      *
      * <p><b>仅 {@code PENDING} 可审批</b>；状态不符抛 {@code APPOINTMENT_STATUS_ILLEGAL(3005)}。

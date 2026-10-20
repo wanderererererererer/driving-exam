@@ -1,0 +1,11 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", fontname="Noto Sans CJK SC", fontsize=10, pad=0.2, nodesep=0.3, ranksep=0.32];
+  node [shape=box, style="rounded,filled", color="#B9C9DF", fillcolor="#F5F8FD", fontname="Noto Sans CJK SC", fontsize=10, margin="0.16,0.09"];
+  edge [color="#7C93B8", arrowsize=0.65];
+  a [label="业务库：题目解析 / 知识点描述"];
+  b [label="装配：KnowledgeDocument"];
+  c [label="分块：≤800 字符"];
+  d [label="Embedding：BGE-M3 / 1024 维"];
+  e [label="Qdrant：确定性 point ID\nupsert 幂等覆盖"];
+  a->b->c->d->e;
+}

@@ -45,7 +45,8 @@ public class AiChatController {
      * POST /api/student/ai/chat
      *
      * <p>{@code sessionId} 由前端传入（同一次对话持续复用），落库后即归属该会话。
-     * AI 调用失败（4001/4002）与超限（4003）由全局异常处理器统一返回。</p>
+     * AI 调用失败（4001/4002）、超限（4003）和知识库检索基础设施故障（4005）由全局异常处理器统一返回。
+     * 无检索命中不是错误，仍返回正常回答（{@code references_json} 为空）。</p>
      */
     @PostMapping("/chat")
     public ApiResponse<AiAnswerVO> chat(

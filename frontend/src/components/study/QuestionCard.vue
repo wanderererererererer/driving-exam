@@ -214,7 +214,7 @@ function optionClass(key: string) {
 }
 .qc__difficulty {
   font-size: 12px;
-  color: #909399;
+  color: #687589;
 }
 .qc__content {
   font-size: 16px;
@@ -241,7 +241,7 @@ function optionClass(key: string) {
   text-align: center;
   padding: 18px 0;
   font-size: 18px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid #dce3ec;
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
@@ -252,7 +252,7 @@ function optionClass(key: string) {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid #dce3ec;
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
@@ -265,7 +265,7 @@ function optionClass(key: string) {
   line-height: 24px;
   text-align: center;
   border-radius: 50%;
-  background: #f0f2f5;
+  background: #f1f4f9;
   font-size: 13px;
 }
 .qc__option-text {
@@ -276,21 +276,21 @@ function optionClass(key: string) {
 /* 交互态 */
 .qc__option:not(.is-locked):hover,
 .qc__judge-btn:not(.is-locked):hover {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: #7597d5;
+  background: #e8effb;
 }
 .is-picked {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: #7597d5;
+  background: #e8effb;
 }
 /* 判分后 */
 .is-correct {
-  border-color: #67c23a;
-  background: #f0f9eb;
+  border-color: #5bae7b;
+  background: #edf7f1;
 }
 .is-wrong {
-  border-color: #f56c6c;
-  background: #fef0f0;
+  border-color: #c96a6a;
+  background: #fbeded;
 }
 .is-locked {
   cursor: default;
@@ -304,7 +304,7 @@ function optionClass(key: string) {
 .qc__result {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed #dce3ec;
 }
 .qc__verdict {
   font-size: 15px;
@@ -312,19 +312,19 @@ function optionClass(key: string) {
   margin-bottom: 10px;
 }
 .qc__verdict.is-ok {
-  color: #67c23a;
+  color: #5bae7b;
 }
 .qc__verdict.is-bad {
-  color: #f56c6c;
+  color: #c96a6a;
 }
 .qc__answer {
   margin-left: 12px;
   font-weight: 400;
-  color: #606266;
+  color: #4a5a70;
 }
 .qc__analysis {
   line-height: 1.7;
-  color: #606266;
+  color: #4a5a70;
   white-space: pre-wrap;
 }
 .qc__ai {

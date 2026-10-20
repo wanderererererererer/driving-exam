@@ -4,9 +4,14 @@ import com.driving.exam.common.result.ApiResponse;
 import com.driving.exam.common.result.PageResult;
 import com.driving.exam.pojo.dto.StudentBindDTO;
 import com.driving.exam.pojo.dto.StudentUpdateDTO;
+import com.driving.exam.pojo.enums.WrongBookCategory;
 import com.driving.exam.pojo.vo.StudentVO;
 import com.driving.exam.pojo.vo.SubjectStatusVO;
+import com.driving.exam.pojo.vo.WrongBookItemVO;
+import com.driving.exam.server.coach.AiSuggestVO;
+import com.driving.exam.server.coach.CoachConfirmDTO;
 import com.driving.exam.server.coach.CoachStudentService;
+import com.driving.exam.server.coach.LearningDataVO;
 import com.driving.exam.server.interceptor.JwtInterceptor;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,7 +34,7 @@ import java.util.List;
  * 因此本类不再重复做权限判断。所有返回统一包在 {@code ApiResponse} 中。</p>
  *
  * <p>类级前缀 {@code /api/coach/students}，方法级只写动作后缀（项目惯例：一 Controller 一模块一前缀）。
- * 5 个接口对齐 {@code doc/api-design.md} §4.10 的「学员管理」小节。</p>
+ * 10 个接口对齐 {@code doc/api-design.md} §4.10 的「学员管理」小节。</p>
  *
  * <p><b>★ 路径变量 {@code {id}} 一律表示 {@code coach_student.id}（绑定记录 ID），
  * 不是学员的用户 ID。</b>名称统一写 {@code bindId}，让"这是哪条绑定的 ID"在签名上就无歧义；
@@ -135,5 +140,91 @@ public class CoachStudentController {
             @RequestAttribute(JwtInterceptor.ATTR_USER_ID) Long coachId,
             @PathVariable Long id) {
         return ApiResponse.success(coachStudentService.listStudentStatus(coachId, id));
+    }
+
+    /**
+     * 6. 学员学习数据（只读）。
+     * GET /api/coach/students/{id}/learning-data?subjectCode=SUBJECT_1&pageNum=1&pageSize=10
+     *
+     * <p>{@code id} 为 {@code coach_student.id}；{@code coachId} 只从 JWT 拦截器写入的请求属性获取，
+     * 不接受前端传入。学习数据只查询归属校验通过的学员，分页仅作用于模拟考试历史。</p>
+     */
+    @GetMapping("/{id}/learning-data")
+    public ApiResponse<LearningDataVO> getLearningData(
+            @RequestAttribute(JwtInterceptor.ATTR_USER_ID) Long coachId,
+            @PathVariable Long id,
+            @RequestParam String subjectCode,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(
+                coachStudentService.getLearningData(coachId, id, subjectCode, pageNum, pageSize));
+    }
+
+    /**
+     * 7. 学员错题数据（只读，分页）。
+     * GET /api/coach/students/{id}/wrong-book?subjectCode=&category=&pageNum=1&pageSize=10
+     *
+     * <p>{@code id} 为 {@code coach_student.id}；{@code coachId} 只从 JWT 请求属性获取。
+     * {@code category} 取值与学员端一致：MASTERED / HIGH_FREQUENCY / PENDING，不传表示全部；
+     * 非法枚举值由全局异常处理器返回 1001。</p>
+     */
+    @GetMapping("/{id}/wrong-book")
+    public ApiResponse<PageResult<WrongBookItemVO>> listStudentWrongBook(
+            @RequestAttribute(JwtInterceptor.ATTR_USER_ID) Long coachId,
+            @PathVariable Long id,
+            @RequestParam(required = false) String subjectCode,
+            @RequestParam(required = false) WrongBookCategory category,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(coachStudentService.listStudentWrongBook(
+                coachId, id, subjectCode, category, pageNum, pageSize));
+    }
+
+    /**
+     * 8. 读取已保存的学员 AI 学习建议（只读）。
+     * GET /api/coach/students/{id}/ai-suggest?subjectCode=SUBJECT_1
+     *
+     * <p>不调用 AI、不生成规则建议、不写库、不重置确认状态；无保存建议时 data=null。</p>
+     */
+    @GetMapping("/{id}/ai-suggest")
+    public ApiResponse<AiSuggestVO> getSavedAiSuggest(
+            @RequestAttribute(JwtInterceptor.ATTR_USER_ID) Long coachId,
+            @PathVariable Long id,
+            @RequestParam String subjectCode) {
+        return ApiResponse.success(
+                coachStudentService.getSavedAiSuggest(coachId, id, subjectCode));
+    }
+
+    /**
+     * 9. 生成学员 AI 学习建议（只读查询 + 写入建议字段，不修改错题/考试数据）。
+     * POST /api/coach/students/{id}/ai-suggest?subjectCode=SUBJECT_1
+     *
+     * <p>AI 超时/失败时返回规则建议，响应中的 {@code source=RULE}、{@code aiSuccess=false}、
+     * {@code degraded=true}，不会把规则文本标记为 AI 成功生成。</p>
+     */
+    @PostMapping("/{id}/ai-suggest")
+    public ApiResponse<AiSuggestVO> generateAiSuggest(
+            @RequestAttribute(JwtInterceptor.ATTR_USER_ID) Long coachId,
+            @PathVariable Long id,
+            @RequestParam String subjectCode) {
+        return ApiResponse.success(coachStudentService.generateAiSuggest(coachId, id, subjectCode));
+    }
+
+    /**
+     * 10. 教练独立确认/修改学员当前科目的确认状态。
+     * PUT /api/coach/students/{id}/confirm?subjectCode=SUBJECT_1
+     *
+     * <p>请求体：{@code {"confirmStatus":"CONFIRMED_READY"}}；合法值为
+     * CONFIRMED_READY / NOT_READY / NEED_HELP。确认不依赖 AI 建议，也不触发 AI；
+     * 已有确认时允许修改。</p>
+     */
+    @PutMapping("/{id}/confirm")
+    public ApiResponse<Void> confirmSuggestion(
+            @RequestAttribute(JwtInterceptor.ATTR_USER_ID) Long coachId,
+            @PathVariable Long id,
+            @RequestParam String subjectCode,
+            @RequestBody @Valid CoachConfirmDTO dto) {
+        coachStudentService.confirmSuggestion(coachId, id, subjectCode, dto.getConfirmStatus());
+        return ApiResponse.success();
     }
 }

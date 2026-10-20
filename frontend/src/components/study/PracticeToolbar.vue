@@ -46,10 +46,10 @@ const progressText = computed(
   justify-content: space-between;
   padding-bottom: 12px;
   margin-bottom: 16px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #dce3ec;
 }
 .ptb__progress {
   font-size: 14px;
-  color: #606266;
+  color: #4a5a70;
 }
 </style>

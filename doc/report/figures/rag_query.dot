@@ -1,0 +1,12 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", fontname="Noto Sans CJK SC", fontsize=10, pad=0.2, nodesep=0.3, ranksep=0.32];
+  node [shape=box, style="rounded,filled", color="#B9C9DF", fillcolor="#F5F8FD", fontname="Noto Sans CJK SC", fontsize=10, margin="0.16,0.09"];
+  edge [color="#7C93B8", arrowsize=0.65];
+  a [label="用户问题"];
+  b [label="Embedding：BGE-M3"];
+  c [label="Qdrant 检索：topK=5\n科目过滤"];
+  d [label="上下文预算：1200 字符"];
+  e [label="DeepSeek 生成回答"];
+  f [label="保存 references_json"];
+  a->b->c->d->e->f;
+}

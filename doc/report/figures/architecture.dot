@@ -1,0 +1,21 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", fontname="Noto Sans CJK SC", fontsize=11, pad=0.25, nodesep=0.4, ranksep=0.45];
+  node [shape=box, style="rounded,filled", color="#B9C9DF", fillcolor="#F5F8FD", fontname="Noto Sans CJK SC", fontsize=10, margin="0.16,0.08"];
+  edge [color="#7C93B8", fontname="Noto Sans CJK SC", fontsize=8, arrowsize=0.6];
+
+  browser [label="浏览器\n学员 / 教练 / 管理员"];
+  frontend [label="Vue 3 SPA\nVite + Element Plus\n路由守卫 + Axios"];
+  nginx [label="Nginx\n静态资源 + /api 反向代理"];
+  backend [label="Spring Boot 3.2.5\nJWT 拦截器 / Controller / Service / Mapper"];
+  mysql [label="MySQL 8\n业务数据 · 16 张表"];
+  deepseek [label="DeepSeek API\n问答生成"];
+  embedding [label="SiliconFlow\nBGE-M3 Embedding"];
+  qdrant [label="Qdrant\ndriving_exam_kb_dev"];
+
+  browser -> frontend -> nginx -> backend;
+  backend -> mysql [label="MyBatis-Plus"];
+  backend -> embedding [label="入库/检索向量"];
+  backend -> qdrant [label="upsert / query"];
+  backend -> deepseek [label="Chat Completions"];
+  embedding -> qdrant [label="1024 维", style=dashed];
+}

@@ -11,7 +11,8 @@ import type { PaperVO } from '@/types'
  * <p>**科目来自路由 query** {@code /student/exam?subjectCode=SUBJECT_1}（由科目一/四页面进入），
  * 页内**不再**提供科目切换。缺参或非法参数一律提示并跳回，**不静默请求错误科目**。</p>
  *
- * <p>范围：展示后端真实返回的试卷列表 + 调用真实的「开始考试」接口；**不含**答题页 / 倒计时 / 交卷 / 报告。</p>
+ * <p>范围：展示后端真实返回的试卷列表 + 调用真实的「开始考试」接口；答题与逐题报告分别在
+ * {@code /student/exam/:examId} 和 {@code /student/exam/:examId/report} 页面展示。</p>
  */
 const route = useRoute()
 const router = useRouter()
@@ -173,9 +174,9 @@ function goBack(): void {
 }
 .exam__title {
   margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .exam__loading {
   background: #fff;
@@ -195,7 +196,7 @@ function goBack(): void {
 .exam__card-title {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .exam__meta {
   margin-top: 10px;
@@ -203,7 +204,7 @@ function goBack(): void {
   flex-wrap: wrap;
   gap: 8px 16px;
   font-size: 13px;
-  color: #909399;
+  color: #687589;
 }
 .exam__tag {
   margin-top: 10px;

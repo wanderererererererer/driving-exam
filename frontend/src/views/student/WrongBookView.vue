@@ -93,9 +93,9 @@ function onRetry() {
 }
 .wbv__title {
   margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .wbv__bar {
   display: flex;

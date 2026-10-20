@@ -238,23 +238,23 @@ const entries = computed(() => [
 
 /* ---------------- 卡片配色（预置浅色常量，不用 color-mix） ---------------- */
 .sh__card--sequence {
-  --card-color: #409eff;
-  --card-bg: #ecf5ff;
+  --card-color: #7597d5;
+  --card-bg: #e8effb;
   --card-icon-bg: #d9ecff;
 }
 .sh__card--random {
-  --card-color: #67c23a;
-  --card-bg: #f0f9eb;
+  --card-color: #5bae7b;
+  --card-bg: #edf7f1;
   --card-icon-bg: #e1f3d8;
 }
 .sh__card--chapter {
-  --card-color: #e6a23c;
-  --card-bg: #fdf6ec;
+  --card-color: #c98f4a;
+  --card-bg: #fbf4e8;
   --card-icon-bg: #faecd8;
 }
 .sh__card--wrong {
-  --card-color: #f56c6c;
-  --card-bg: #fef0f0;
+  --card-color: #c96a6a;
+  --card-bg: #fbeded;
   --card-icon-bg: #fde2e2;
 }
 
@@ -271,9 +271,9 @@ const entries = computed(() => [
 .sh__title {
   justify-self: center; /* 标题居中 */
   margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 
 /* 内容区：占据页头之外的剩余高度，把「4 练习卡 + 2 功能卡」整体居中 */
@@ -330,7 +330,7 @@ const entries = computed(() => [
 .sh__card-desc {
   margin-top: 6px;
   font-size: 13px;
-  color: #909399;
+  color: #687589;
 }
 
 /* ---------------- 下方两个并排功能卡片（模拟考试 / 考试记录） ---------------- */
@@ -343,13 +343,13 @@ const entries = computed(() => [
   max-width: 528px;
 }
 .sh__more-card--exam {
-  --card-color: #409eff;
-  --card-bg: #ecf5ff;
+  --card-color: #7597d5;
+  --card-bg: #e8effb;
   --card-icon-bg: #d9ecff;
 }
 .sh__more-card--records {
-  --card-color: #909399;
-  --card-bg: #f4f4f5;
+  --card-color: #687589;
+  --card-bg: #f2f4f7;
   --card-icon-bg: #e9e9eb;
 }
 .sh__more-card {
@@ -389,7 +389,7 @@ const entries = computed(() => [
 .sh__more-desc {
   margin-top: 4px;
   font-size: 13px;
-  color: #909399;
+  color: #687589;
 }
 
 /* ---------------- 悬浮按钮 ---------------- */

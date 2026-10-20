@@ -12,8 +12,8 @@ import type { ExamRecordVO } from '@/types'
  * 缺参或非法一律提示并跳回。数据来自后端既有接口 {@code GET /api/student/exam/history}
  * （按科目过滤、按交卷时间倒序分页）。</p>
  *
- * <p>仅展示后端真实返回的字段：试卷名称 / 交卷时间 / 得分 / 是否通过。
- * **后端未返回**考试状态字段、且**无成绩详情页**，故本页不展示这两项。</p>
+ * <p>仅展示后端真实返回的字段：试卷名称 / 交卷时间 / 得分 / 是否通过；每行提供逐题报告入口。
+ * 报告页从 {@code GET /api/student/exam/{examId}/report} 读取真实逐题数据。</p>
  */
 const route = useRoute()
 const router = useRouter()
@@ -74,6 +74,14 @@ function onPageChange(p: number): void {
   loadRecords()
 }
 
+/** 查看某场已结束考试的逐题报告 */
+function goReport(row: ExamRecordVO): void {
+  router.push({
+    path: `/student/exam/${row.examId}/report`,
+    query: subjectCode.value ? { subjectCode: subjectCode.value } : {},
+  })
+}
+
 /** 返回对应科目首页 */
 function goBack(): void {
   router.push(valid.value ? `/student/subject/${subjectCode.value}` : '/student/dashboard')
@@ -117,6 +125,11 @@ function goBack(): void {
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="goReport(row)">查看报告</el-button>
+          </template>
+        </el-table-column>
 
         <template #empty>
           <el-empty description="暂无考试记录" />
@@ -148,9 +161,9 @@ function goBack(): void {
 }
 .er__title {
   margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .er__loading {
   background: #fff;

@@ -56,6 +56,7 @@ public class KnowledgePointServiceImpl extends ServiceImpl<KnowledgePointMapper,
             vo.setParentId(p.getParentId());
             vo.setLevel(p.getLevel());
             vo.setSortOrder(p.getSortOrder());
+            vo.setDescription(p.getDescription());
             vo.setQuestionCount(directCount.getOrDefault(p.getId(), 0));
             nodeMap.put(p.getId(), vo);
         }

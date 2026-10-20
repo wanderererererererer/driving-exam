@@ -1,0 +1,112 @@
+# ============================================================
+# 驾考智能辅导系统 · 核心 Docker 部署（MySQL + 后端 + Nginx 前端 + Qdrant）
+#
+# 使用：
+#   cd D:\myself\Integrate
+#   copy docker\.env.example docker\.env   # 修改密码/JWT/可选 Key
+#   docker compose --env-file docker/.env -p driving-exam-accept config
+#   docker compose --env-file docker/.env -p driving-exam-accept up -d --build
+#
+# 首次启动仅在空 mysql-data 卷上执行 SQL 初始化；初始化脚本含 DROP/DELETE，
+# 只能用于独立空卷，绝不能对本机 driving_exam 手工执行。
+# 不要对已有数据卷执行 docker compose --env-file docker/.env -p driving-exam-accept down -v（会删除 Docker 项目卷）。
+#
+# Qdrant 默认启动，供 AI/RAG 检索使用；外部 DeepSeek/SiliconFlow Key 仍需配置。
+# 首次部署后需要通过管理员接口 POST /api/admin/rag/ingest 执行一次知识入库，
+# collection 默认是 driving_exam_kb_dev；入库是确定性 point ID 的幂等 upsert，不删除集合。
+# MySQL root 只用于初始化/管理员维护；Spring Boot 运行时使用 drv_app（仅目标库 DML）。
+# 初始化脚本 10-app-user.sh 从 APP_DB_USER/APP_DB_PASSWORD 创建应用账号；已有卷不会自动重跑。
+# ============================================================
+name: driving-exam
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-driving_exam}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 docker/.env 设置 MYSQL_ROOT_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER:-drv_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?请在 docker/.env 设置 APP_DB_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./sql/_localhost-2026_10_08_17_26_16-dump.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./sql/alter-appointment-status-comment.sql:/docker-entrypoint-initdb.d/02-appointment-status.sql:ro
+      - ./sql/seed-question.sql:/docker-entrypoint-initdb.d/03-seed-question.sql:ro
+      - ./sql/seed-question-extra.sql:/docker-entrypoint-initdb.d/04-seed-question-extra.sql:ro
+      - ./sql/seed-exam-paper.sql:/docker-entrypoint-initdb.d/05-seed-exam-paper.sql:ro
+      - ./docker/mysql/init/10-app-user.sh:/docker-entrypoint-initdb.d/10-app-user.sh:ro
+      - ./docker/mysql/init/90-demo-accounts.sql:/docker-entrypoint-initdb.d/90-demo-accounts.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-driving_exam}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${APP_DB_USER:-drv_app}
+      DB_PASSWORD: ${APP_DB_PASSWORD:?请在 docker/.env 设置 APP_DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?请在 docker/.env 设置 JWT_SECRET（至少 32 字节）}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT_BASE_URL: ${QDRANT_BASE_URL:-http://qdrant:6333}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-driving_exam_kb_dev}
+      QDRANT_VECTOR_SIZE: ${QDRANT_VECTOR_SIZE:-1024}
+      TZ: Asia/Shanghai
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/auth/me | grep -qE '401|200'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # AI/RAG 向量库；默认启动。首次使用前通过管理员入库接口创建/更新 collection。
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+volumes:
+  mysql-data:
+  qdrant-data:

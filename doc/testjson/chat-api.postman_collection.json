@@ -1,0 +1,2395 @@
+{
+  "info": {
+    "name": "驾考系统 · 聊天模块回归测试（Apifox 可导入）",
+    "description": "聊天模块测试集合，基于当前仓库实际实现生成。\n\n【导入格式】Postman Collection v2.1；仓库现有 7 个测试集合均使用该 schema，可在 Apifox 中导入。\n【Base URL】{{baseUrl}} 默认 http://localhost:18080（Docker 验收后端）。\n【账号】student01（STUDENT）、coach01（COACH）；student02 仅用于条件越权用例。\n【密码】testPassword 必须在本地集合/环境变量中设置；仓库留空，不写入任何真实口令。\n【Token】studentToken / coachToken / student02Token 由登录响应写入集合变量，不打印、不写文件。\n\n【前置数据】\n1. 验收库存在 student01、coach01；student01 与 coach01 存在有效 coach_student 绑定（status=1）。\n2. 若验收库由 docker/mysql/init/90-demo-accounts.sql 初始化，通常具备上述账号和绑定。\n3. 若使用 student02 条件组，需确认 student02 存在。\n4. 本集合不假设已有聊天会话；TC-CH-06 会在有效绑定下获取或创建会话。\n\n【只读前置核对（不修改数据）】\n在验收库执行：\n  SELECT username, role, status, deleted FROM sys_user WHERE username IN ('student01','coach01');\n  SELECT c.username AS coach, s.username AS student, cs.status FROM coach_student cs JOIN sys_user c ON c.id=cs.coach_id JOIN sys_user s ON s.id=cs.student_id WHERE c.username='coach01' AND s.username='student01';\n只有 student01/coach01 状态正常且绑定 status=1 时才执行组 2 及以后；\n若不存在，停止而不是插入账号、改密码或修改绑定。\n\n【写入范围】组 2 可能创建 chat_session；组 3 会发送消息并标记已读；TC-CH-39 会再发送一条 1000 字消息。\n组 1、组 4 为只读；组 5 除 TC-CH-39 外均为失败请求，不写库。\n仅可在独立 Docker 验收库 driving_exam_docker_accept 执行，不要指向开发库。\n\n【执行顺序】按 0 → 1 → 2 → 3 → 4 → 5 顺序执行。组 6 需额外确认 student02 后单独执行。\n【预期状态码】无 token/无效 token = HTTP 401；角色错路径 = HTTP 403；其余业务失败为 HTTP 200 + code。\n若 Apifox 开启“默认断言 HTTP 200”，401/403 用例会显示假阳性，请关闭默认断言或忽略这两类红色。\n\n【未自动化】3102（未绑定关系创建/解绑后发送）需要改变或确认 coach_student 状态，不能安全地纳入主流程。\n必须在独立验收环境人工准备一个“真实 COACH 用户 + 无有效绑定”的组合，并单独验证创建返回 3102；\n解绑后发送则需先人工备份/确认绑定可恢复，再执行，且不在本集合中自动修改绑定。\n\n【未覆盖】过期 token需要等待或构造过期 JWT；前端轮询、自动滚动、未读徽标属于浏览器验证；\nWebSocket/文件/语音/消息删除未实现。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:18080"
+    },
+    {
+      "key": "testPassword",
+      "value": ""
+    },
+    {
+      "key": "studentUsername",
+      "value": "student01"
+    },
+    {
+      "key": "coachUsername",
+      "value": "coach01"
+    },
+    {
+      "key": "student02Username",
+      "value": "student02"
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "coachToken",
+      "value": ""
+    },
+    {
+      "key": "student02Token",
+      "value": ""
+    },
+    {
+      "key": "invalidToken",
+      "value": "invalid.token.value"
+    },
+    {
+      "key": "student01Id",
+      "value": ""
+    },
+    {
+      "key": "coachId",
+      "value": ""
+    },
+    {
+      "key": "student02Id",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "studentMessageId",
+      "value": ""
+    },
+    {
+      "key": "coachMessageId",
+      "value": ""
+    },
+    {
+      "key": "studentMessageContent",
+      "value": ""
+    },
+    {
+      "key": "coachMessageContent",
+      "value": ""
+    },
+    {
+      "key": "baselineIdsJson",
+      "value": ""
+    },
+    {
+      "key": "baselineFirstId",
+      "value": ""
+    },
+    {
+      "key": "baselineLastId",
+      "value": ""
+    },
+    {
+      "key": "boundaryContent1000",
+      "value": ""
+    },
+    {
+      "key": "boundaryContent1001",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0 · 准备（登录与身份）",
+      "description": "只执行登录和 /api/auth/me；登录本身不写业务表。testPassword 必须在本地环境配置，仓库留空。",
+      "item": [
+        {
+          "name": "00 · 登录（学员 student01）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{studentUsername}}\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"studentToken\", \"\"); pm.collectionVariables.set(\"student01Id\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data.token 非空\", function () { pm.expect(j.data.token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"role = STUDENT\", function () { pm.expect(j.data.role).to.eql(\"STUDENT\"); });",
+                  "pm.test(\"userId 存在\", function () { pm.expect(j.data.userId).to.be.a(\"number\"); });",
+                  "pm.collectionVariables.set(\"studentToken\", j.data.token);",
+                  "pm.collectionVariables.set(\"student01Id\", String(j.data.userId));"
+                ]
+              }
+            }
+          ],
+          "description": "使用验收库已有 student01；密码取自本地集合变量 {{testPassword}}，不写入仓库。"
+        },
+        {
+          "name": "00b · 登录（教练 coach01）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{coachUsername}}\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"COACH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"coachToken\", \"\"); pm.collectionVariables.set(\"coachId\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data.token 非空\", function () { pm.expect(j.data.token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"role = COACH\", function () { pm.expect(j.data.role).to.eql(\"COACH\"); });",
+                  "pm.test(\"userId 存在\", function () { pm.expect(j.data.userId).to.be.a(\"number\"); });",
+                  "pm.collectionVariables.set(\"coachToken\", j.data.token);",
+                  "pm.collectionVariables.set(\"coachId\", String(j.data.userId));"
+                ]
+              }
+            }
+          ],
+          "description": "使用验收库已有 coach01；coachId 从登录响应 userId 获取。"
+        },
+        {
+          "name": "00c · 身份核对 · 学员 auth/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"role = STUDENT\", function () { pm.expect(j.data.role).to.eql(\"STUDENT\"); });",
+                  "pm.test(\"userId 与登录一致\", function () { pm.expect(String(j.data.id)).to.eql(pm.collectionVariables.get(\"student01Id\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "只读；验证 Bearer studentToken 可用。"
+        },
+        {
+          "name": "00d · 身份核对 · 教练 auth/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"role = COACH\", function () { pm.expect(j.data.role).to.eql(\"COACH\"); });",
+                  "pm.test(\"userId 与登录一致\", function () { pm.expect(String(j.data.id)).to.eql(pm.collectionVariables.get(\"coachId\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "只读；验证 Bearer coachToken 可用。"
+        }
+      ]
+    },
+    {
+      "name": "1 · 只读基线（不写库）",
+      "description": "只查询会话列表和鉴权边界，不创建、不发送、不标记已读。",
+      "item": [
+        {
+          "name": "TC-CH-01 学员会话列表 · 结构校验",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "pm.test(\"会话字段结构\", function () { j.data.forEach(function (s) { pm.expect(s).to.have.property(\"id\"); pm.expect(s).to.have.property(\"peerUserId\"); pm.expect(s).to.have.property(\"lastMessage\"); pm.expect(s).to.have.property(\"lastMessageTime\"); pm.expect(s.unreadCount).to.be.a(\"number\"); pm.expect(s.canSend).to.be.a(\"boolean\"); }); });"
+                ]
+              }
+            }
+          ],
+          "description": "允许空数组；不假设一定已有会话。"
+        },
+        {
+          "name": "TC-CH-02 教练会话列表 · 结构校验",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 是数组\", function () { pm.expect(j.data).to.be.an(\"array\"); });",
+                  "pm.test(\"会话字段结构\", function () { j.data.forEach(function (s) { pm.expect(s).to.have.property(\"id\"); pm.expect(s).to.have.property(\"peerUserId\"); pm.expect(s).to.have.property(\"lastMessage\"); pm.expect(s).to.have.property(\"lastMessageTime\"); pm.expect(s.unreadCount).to.be.a(\"number\"); pm.expect(s.canSend).to.be.a(\"boolean\"); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-03 鉴权 · 不带 token → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ],
+          "description": "无 Authorization 头；预期真实 HTTP 401，不是业务 200。"
+        },
+        {
+          "name": "TC-CH-04 鉴权 · 学员 token 访问教练接口 → HTTP 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ],
+          "description": "PathRoleRule 先于业务层拦截；预期真实 HTTP 403。"
+        },
+        {
+          "name": "TC-CH-05 鉴权 · 教练 token 访问学员接口 → HTTP 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 · 会话获取与幂等创建（写入：可能创建会话）",
+      "description": "首次成功获取会创建 chat_session；重复请求应返回同一会话。需要 student01 与 coach01 存在有效绑定。",
+      "item": [
+        {
+          "name": "TC-CH-06 学员获取/创建会话",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"coachId\": {{coachId}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"会话 id 存在\", function () { pm.expect(j.data.id).to.be.a(\"number\"); });",
+                  "pm.test(\"peerUserId = coachId\", function () { pm.expect(String(j.data.peerUserId)).to.eql(pm.collectionVariables.get(\"coachId\")); });",
+                  "pm.test(\"canSend = true\", function () { pm.expect(j.data.canSend).to.eql(true); });",
+                  "pm.collectionVariables.set(\"sessionId\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "description": "需要 coach01 与 student01 的 coach_student.status=1；否则返回 3102，本组后续失败。"
+        },
+        {
+          "name": "TC-CH-07 学员重复获取 → 幂等返回同一会话",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"coachId\": {{coachId}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"id 与首次一致\", function () { pm.expect(String(j.data.id)).to.eql(pm.collectionVariables.get(\"sessionId\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "后端依赖 uk_student_coach + INSERT IGNORE 保证同一对学员/教练只有一个会话。"
+        },
+        {
+          "name": "TC-CH-08 教练获取同一会话 · 角色互换",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"studentId\": {{student01Id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"id 与学员端一致\", function () { pm.expect(String(j.data.id)).to.eql(pm.collectionVariables.get(\"sessionId\")); });",
+                  "pm.test(\"peerUserId = student01Id\", function () { pm.expect(String(j.data.peerUserId)).to.eql(pm.collectionVariables.get(\"student01Id\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-09 教练重复获取 → 幂等",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"studentId\": {{student01Id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"id 仍一致\", function () { pm.expect(String(j.data.id)).to.eql(pm.collectionVariables.get(\"sessionId\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-10 参数 · 学员创建缺 coachId → 1001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "Bean Validation 失败；不创建会话。"
+        },
+        {
+          "name": "TC-CH-11 参数 · coachId 不存在 → 1106",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": 999999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1106\", function () { pm.expect(j.code).to.eql(1106); });"
+                ]
+              }
+            }
+          ],
+          "description": "后端 requirePeer 查不到 COACH 用户时返回 ROLE_MISMATCH(1106)，不会创建会话。"
+        }
+      ]
+    },
+    {
+      "name": "3 · 消息发送与已读（写入）",
+      "description": "会新增 chat_message，并更新 chat_session.last_message、last_message_time 和双方未读数。请只在独立验收库执行。",
+      "item": [
+        {
+          "name": "TC-CH-12 学员发送消息",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"{{studentMessageContent}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"studentMessageContent\", \"验收-学员-\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"senderRole = STUDENT\", function () { pm.expect(j.data.senderRole).to.eql(\"STUDENT\"); });",
+                  "pm.test(\"senderId = student01Id\", function () { pm.expect(String(j.data.senderId)).to.eql(pm.collectionVariables.get(\"student01Id\")); });",
+                  "pm.test(\"content 一致\", function () { pm.expect(j.data.content).to.eql(pm.collectionVariables.get(\"studentMessageContent\")); });",
+                  "pm.test(\"isRead = false\", function () { pm.expect(j.data.isRead).to.eql(false); });",
+                  "pm.collectionVariables.set(\"studentMessageId\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "description": "写入 1 条消息；内容由前置脚本生成，避免固定内容导致误判。"
+        },
+        {
+          "name": "TC-CH-12b 教练会话列表 · coach_unread ≥1 且摘要正确",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var s = j.data.find(function (x) { return String(x.id) === pm.collectionVariables.get(\"sessionId\"); });",
+                  "pm.test(\"找到当前会话\", function () { pm.expect(s).to.not.be.undefined; });",
+                  "pm.test(\"教练未读数 ≥ 1\", function () { pm.expect(s.unreadCount).to.be.greaterThan(0); });",
+                  "pm.test(\"最后消息为学员消息\", function () { pm.expect(s.lastMessage).to.eql(pm.collectionVariables.get(\"studentMessageContent\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "只读；验证学员发送后 coach_unread 增加，且不回写。"
+        },
+        {
+          "name": "TC-CH-13 教练查询消息 · 可见学员消息",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions/{{sessionId}}/messages?pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var target = j.data.find(function (m) { return String(m.id) === pm.collectionVariables.get(\"studentMessageId\"); });",
+                  "pm.test(\"包含刚发送的学员消息\", function () { pm.expect(target).to.not.be.undefined; });",
+                  "pm.test(\"消息内容与发送者正确\", function () { pm.expect(target.content).to.eql(pm.collectionVariables.get(\"studentMessageContent\")); pm.expect(target.senderRole).to.eql(\"STUDENT\"); });"
+                ]
+              }
+            }
+          ],
+          "description": "只读；不调用已读接口。"
+        },
+        {
+          "name": "TC-CH-14 教练回复消息",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"{{coachMessageContent}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"coachMessageContent\", \"验收-教练-\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"senderRole = COACH\", function () { pm.expect(j.data.senderRole).to.eql(\"COACH\"); });",
+                  "pm.test(\"senderId = coachId\", function () { pm.expect(String(j.data.senderId)).to.eql(pm.collectionVariables.get(\"coachId\")); });",
+                  "pm.test(\"content 一致\", function () { pm.expect(j.data.content).to.eql(pm.collectionVariables.get(\"coachMessageContent\")); });",
+                  "pm.collectionVariables.set(\"coachMessageId\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "description": "写入 1 条消息；从响应保存 coachMessageId。"
+        },
+        {
+          "name": "TC-CH-15 学员查询消息 · 正序且包含双方消息",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var ids = j.data.map(function (m) { return m.id; });",
+                  "var sorted = ids.slice().sort(function (a, b) { return a - b; });",
+                  "pm.test(\"消息按 id 正序\", function () { pm.expect(ids).to.eql(sorted); });",
+                  "var s = j.data.find(function (m) { return String(m.id) === pm.collectionVariables.get(\"studentMessageId\"); });",
+                  "var c = j.data.find(function (m) { return String(m.id) === pm.collectionVariables.get(\"coachMessageId\"); });",
+                  "pm.test(\"双方消息都存在\", function () { pm.expect(s).to.not.be.undefined; pm.expect(c).to.not.be.undefined; });",
+                  "pm.test(\"学员消息先于教练消息\", function () { pm.expect(Number(pm.collectionVariables.get(\"studentMessageId\"))).to.be.lessThan(Number(pm.collectionVariables.get(\"coachMessageId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-16 学员会话列表 · 未读数 ≥1 且摘要正确",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var s = j.data.find(function (x) { return String(x.id) === pm.collectionVariables.get(\"sessionId\"); });",
+                  "pm.test(\"找到当前会话\", function () { pm.expect(s).to.not.be.undefined; });",
+                  "pm.test(\"学员未读数 ≥ 1\", function () { pm.expect(s.unreadCount).to.be.greaterThan(0); });",
+                  "pm.test(\"最后消息为教练回复\", function () { pm.expect(s.lastMessage).to.eql(pm.collectionVariables.get(\"coachMessageContent\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-17 学员标记会话已读",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "read"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "写入已读状态；只清 student_unread，并标记教练发来的消息。"
+        },
+        {
+          "name": "TC-CH-18 学员复查消息 · 教练消息已读、自己消息仍未读",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var s = j.data.find(function (m) { return String(m.id) === pm.collectionVariables.get(\"studentMessageId\"); });",
+                  "var c = j.data.find(function (m) { return String(m.id) === pm.collectionVariables.get(\"coachMessageId\"); });",
+                  "pm.test(\"教练消息 isRead = true\", function () { pm.expect(c.isRead).to.eql(true); });",
+                  "pm.test(\"自己发送的消息未被自己标读\", function () { pm.expect(s.isRead).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-19 学员会话列表 · student_unread 清零",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var s = j.data.find(function (x) { return String(x.id) === pm.collectionVariables.get(\"sessionId\"); });",
+                  "pm.test(\"找到当前会话\", function () { pm.expect(s).to.not.be.undefined; });",
+                  "pm.test(\"学员未读数为 0\", function () { pm.expect(s.unreadCount).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-20 教练标记会话已读",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions/{{sessionId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "read"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });"
+                ]
+              }
+            }
+          ],
+          "description": "写入已读状态；只清 coach_unread，并标记学员发来的消息。"
+        },
+        {
+          "name": "TC-CH-21 教练复查消息 · 学员消息已读",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions/{{sessionId}}/messages?pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var s = j.data.find(function (m) { return String(m.id) === pm.collectionVariables.get(\"studentMessageId\"); });",
+                  "pm.test(\"学员消息 isRead = true\", function () { pm.expect(s.isRead).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-22 教练会话列表 · coach_unread 清零",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var s = j.data.find(function (x) { return String(x.id) === pm.collectionVariables.get(\"sessionId\"); });",
+                  "pm.test(\"找到当前会话\", function () { pm.expect(s).to.not.be.undefined; });",
+                  "pm.test(\"教练未读数为 0\", function () { pm.expect(s.unreadCount).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 · 游标与分页（只读）",
+      "description": "不写库。依赖前面已产生的两条消息和 sessionId；验证 lastId 增量、beforeId 向前翻页、页大小上限和参数互斥。",
+      "item": [
+        {
+          "name": "TC-CH-23 首屏最近一页 · pageSize=20 正序",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"最多 20 条\", function () { pm.expect(j.data.length).to.be.at.most(20); });",
+                  "var ids = j.data.map(function (m) { return m.id; });",
+                  "var sorted = ids.slice().sort(function (a, b) { return a - b; });",
+                  "pm.test(\"按 id 正序\", function () { pm.expect(ids).to.eql(sorted); });",
+                  "pm.collectionVariables.set(\"baselineIdsJson\", JSON.stringify(ids));",
+                  "pm.collectionVariables.set(\"baselineFirstId\", ids.length ? String(ids[0]) : \"\");",
+                  "pm.collectionVariables.set(\"baselineLastId\", ids.length ? String(ids[ids.length - 1]) : \"\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-24 lastId 增量 · 只返回更大的 id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?lastId={{studentMessageId}}&pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "lastId",
+                  "value": "{{studentMessageId}}"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var cursor = Number(pm.collectionVariables.get(\"studentMessageId\"));",
+                  "pm.test(\"所有 id > cursor\", function () { j.data.forEach(function (m) { pm.expect(m.id).to.be.greaterThan(cursor); }); });",
+                  "var ids = j.data.map(function (m) { return m.id; });",
+                  "var sorted = ids.slice().sort(function (a, b) { return a - b; });",
+                  "pm.test(\"按 id 正序\", function () { pm.expect(ids).to.eql(sorted); });",
+                  "pm.test(\"包含教练回复\", function () { pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"coachMessageId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-25 beforeId 向前翻页 · 只返回更小的 id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?beforeId={{coachMessageId}}&pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "beforeId",
+                  "value": "{{coachMessageId}}"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "var cursor = Number(pm.collectionVariables.get(\"coachMessageId\"));",
+                  "pm.test(\"所有 id < cursor\", function () { j.data.forEach(function (m) { pm.expect(m.id).to.be.lessThan(cursor); }); });",
+                  "var ids = j.data.map(function (m) { return m.id; });",
+                  "var sorted = ids.slice().sort(function (a, b) { return a - b; });",
+                  "pm.test(\"按 id 正序\", function () { pm.expect(ids).to.eql(sorted); });",
+                  "pm.test(\"包含学员消息\", function () { pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"studentMessageId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-26 beforeId=1 · 边界应返回空数组",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?beforeId=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "beforeId",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data 为空数组\", function () { pm.expect(j.data).to.eql([]); });"
+                ]
+              }
+            }
+          ],
+          "description": "消息自增 id 从 1 开始，不存在 id < 1 的消息。"
+        },
+        {
+          "name": "TC-CH-27 页大小上限 · pageSize=100 实际 ≤ 50",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?pageSize=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"实际条数不超过上限 50\", function () { pm.expect(j.data.length).to.be.at.most(50); });"
+                ]
+              }
+            }
+          ],
+          "description": "后端 normalizePageSize 将 100 夹到 50；本断言确认不会返回超过 50 条。"
+        },
+        {
+          "name": "TC-CH-28 参数 · lastId 与 beforeId 同时传 → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?lastId=1&beforeId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "lastId",
+                  "value": "1"
+                },
+                {
+                  "key": "beforeId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-29 参数 · beforeId=0 → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?beforeId=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "beforeId",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-30 参数 · lastId=-1 → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?lastId=-1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "lastId",
+                  "value": "-1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-31 边界 · lastId=0 等同最近一页",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?lastId=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "lastId",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "var ids = j.data.map(function (m) { return m.id; });",
+                  "pm.test(\"与首屏最近一页 id 序列一致\", function () { pm.expect(JSON.stringify(ids)).to.eql(pm.collectionVariables.get(\"baselineIdsJson\")); });"
+                ]
+              }
+            }
+          ],
+          "description": "后端对 lastId=0 走最近一页分支，不是 id > 0；组内无写入，故应与 TC-CH-23 相同。"
+        }
+      ]
+    },
+    {
+      "name": "5 · 权限与参数异常",
+      "description": "前 5 条为鉴权/不存在，随后为消息参数边界。只有 TC-CH-38（1000 字）会写入一条消息；其余失败请求不写库。",
+      "item": [
+        {
+          "name": "TC-CH-32 无 token 查询消息 → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-33 无效 token → HTTP 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{invalidToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 401\", function () { pm.expect(j.code).to.eql(401); });"
+                ]
+              }
+            }
+          ],
+          "description": "Header 值会成为 Bearer invalid.token.value；JwtInterceptor 校验失败。"
+        },
+        {
+          "name": "TC-CH-34 不存在的会话 → 5001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/999999999/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "999999999",
+                "messages"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 5001\", function () { pm.expect(j.code).to.eql(5001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-35 学员 token 调用教练发送接口 → HTTP 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coach/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coach",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"不应发出\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ],
+          "description": "PathRoleRule 在 Controller 前拒绝，不会产生消息。"
+        },
+        {
+          "name": "TC-CH-36 教练 token 调用学员发送接口 → HTTP 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coachToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"不应发出\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 403\", function () { pm.expect(j.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-37 空白消息 → 1001（不写库）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-CH-38 超长消息 1001 字 → 1001（不写库）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"{{boundaryContent1001}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"boundaryContent1001\", new Array(1002).join(\"a\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "后端按 Unicode code point 数限制 1000；1001 字被拒绝，消息不落库。"
+        },
+        {
+          "name": "TC-CH-39 消息恰好 1000 字 → 200（写入 1 条）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"{{boundaryContent1000}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"boundaryContent1000\", new Array(1001).join(\"a\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"content 长度为 1000\", function () { pm.expect(j.data.content.length).to.eql(1000); });"
+                ]
+              }
+            }
+          ],
+          "description": "边界成功用例，会新增一条 1000 字消息并增加教练未读；放在已读断言之后。"
+        },
+        {
+          "name": "TC-CH-40 参数 · pageSize=abc → 1001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages?pageSize=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "abc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 1001\", function () { pm.expect(j.code).to.eql(1001); });"
+                ]
+              }
+            }
+          ],
+          "description": "MethodArgumentTypeMismatchException 由全局处理器转为 1001。"
+        }
+      ]
+    },
+    {
+      "name": "6 · 条件用例（需额外前置，默认不建议随主流程执行）",
+      "description": "需要 student02 存在且与当前会话无关。若验收库未初始化 student02，本组会失败；请先只读确认账号状态，或在本组前手动跳过。",
+      "item": [
+        {
+          "name": "TC-CH-41 条件 · 登录 student02",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{student02Username}}\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"STUDENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"student02Token\", \"\"); pm.collectionVariables.set(\"student02Id\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 200\", function () { pm.expect(j.code).to.eql(200); });",
+                  "pm.test(\"data.token 非空\", function () { pm.expect(j.data.token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"role = STUDENT\", function () { pm.expect(j.data.role).to.eql(\"STUDENT\"); });",
+                  "pm.test(\"userId 存在\", function () { pm.expect(j.data.userId).to.be.a(\"number\"); });",
+                  "pm.collectionVariables.set(\"student02Token\", j.data.token);",
+                  "pm.collectionVariables.set(\"student02Id\", String(j.data.userId));"
+                ]
+              }
+            }
+          ],
+          "description": "前置：验收库存在 student02（演示初始化脚本含该账号）。不存在则本组不可执行。"
+        },
+        {
+          "name": "TC-CH-42 条件 · 非参与者读取会话 → 5001",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student02Token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/chat/sessions/{{sessionId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "chat",
+                "sessions",
+                "{{sessionId}}",
+                "messages"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"code = 5001\", function () { pm.expect(j.code).to.eql(5001); });",
+                  "pm.test(\"不返回消息 data\", function () { pm.expect(j.data).to.eql(null); });"
+                ]
+              }
+            }
+          ],
+          "description": "student02 不是 student01↔coach01 会话的参与者；后端统一 5001，不泄露会话存在性。"
+        }
+      ]
+    }
+  ]
+}

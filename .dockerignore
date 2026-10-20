@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.env
+docker/.env
+frontend/node_modules
+frontend/dist
+frontend/.vite
+**/target
+# 本机真实配置含数据源凭据，绝不能进入镜像构建上下文或 JAR
+driving-exam/driving-exam-server/src/main/resources/application.yml
+backend - bake
+configs.txt
+file-tree.txt
+*.log

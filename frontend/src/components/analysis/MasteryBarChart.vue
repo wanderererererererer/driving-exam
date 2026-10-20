@@ -34,7 +34,7 @@ function buildOption(): echarts.EChartsOption {
         label: { show: true, position: 'right', formatter: '{c}%' },
         data: sorted.map((k) => ({
           value: Math.round(k.mastery * 100),
-          itemStyle: { color: k.isWeak ? '#f56c6c' : '#409eff' }, // 短板红 / 正常蓝
+          itemStyle: { color: k.isWeak ? '#c96a6a' : '#7597d5' }, // 短板红 / 正常蓝
         })),
       },
     ],

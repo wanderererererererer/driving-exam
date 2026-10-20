@@ -1,0 +1,31 @@
+digraph auth {
+  rankdir=TB;
+  graph [fontname="Noto Sans CJK SC", bgcolor="white", pad="0.2", nodesep="0.35", ranksep="0.35"];
+  node [fontname="Noto Sans CJK SC", fontsize=10, shape=box, style="rounded,filled", fillcolor="#F5F7FA", color="#7597D5", penwidth=1.2, margin="0.12,0.06"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#5F6B7A", arrowsize=0.7];
+
+  start [label="请求进入 /api/**", fillcolor="#E8EFFB"];
+  token [label="读取 Authorization: Bearer <token>"];
+  sig [label="校验签名与有效期", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  load [label="按 userId 读取 sys_user"];
+  state [label="账号存在且 status=1？", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  role [label="token 角色 = 当前角色？", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  path [label="PathRoleRule 路径角色匹配？", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  ctrl [label="进入 Controller / Service", fillcolor="#EDF7F1", color="#5BAE7B"];
+  own [label="业务层校验资源归属", fillcolor="#EDF7F1", color="#5BAE7B"];
+  ok [label="返回业务结果", fillcolor="#EDF7F1", color="#5BAE7B"];
+  e401 [label="HTTP 401\ncode 401 / 1102 / 1106", fillcolor="#FBEDED", color="#C96A6A"];
+  e403 [label="HTTP 403\ncode 403", fillcolor="#FBEDED", color="#C96A6A"];
+
+  start -> token -> sig;
+  sig -> e401 [label="否"];
+  sig -> load [label="是"];
+  load -> state;
+  state -> e401 [label="否"];
+  state -> role [label="是"];
+  role -> e401 [label="否"];
+  role -> path [label="是"];
+  path -> e403 [label="否"];
+  path -> ctrl [label="是"];
+  ctrl -> own -> ok;
+}

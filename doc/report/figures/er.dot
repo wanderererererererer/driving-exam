@@ -1,0 +1,42 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", fontname="Noto Sans CJK SC", fontsize=10, pad=0.25, nodesep=0.3, ranksep=0.5];
+  node [shape=box, style="rounded,filled", color="#B9C9DF", fillcolor="#F5F8FD", fontname="Noto Sans CJK SC", fontsize=9, margin="0.12,0.07"];
+  edge [color="#7C93B8", fontname="Noto Sans CJK SC", fontsize=8, arrowsize=0.6];
+
+  user [label="sys_user\n用户"];
+  kp [label="knowledge_point\n知识点"];
+  q [label="question\n题目"];
+  opt [label="question_option\n选项"];
+  ar [label="answer_record\n作答"];
+  wb [label="wrong_book\n错题"];
+  paper [label="exam_paper\n试卷"];
+  pq [label="exam_paper_question\n组卷"];
+  exam [label="mock_exam\n考试"];
+  ea [label="mock_exam_answer\n暂存"];
+  ss [label="student_subject_status\n学情"];
+  cs [label="coach_student\n绑定"];
+  appt [label="appointment\n预约"];
+  ai [label="ai_chat_record\nAI 记录"];
+  ses [label="chat_session\n会话"];
+  msg [label="chat_message\n消息"];
+
+  user -> ar [label="1:N"];
+  user -> wb [label="1:N"];
+  user -> exam [label="1:N"];
+  user -> ss [label="1:N"];
+  user -> appt [label="student/coach"];
+  user -> ai [label="1:N"];
+  user -> cs [label="coach/student"];
+  user -> ses [label="student/coach"];
+  kp -> kp [label="parent_id"];
+  kp -> q [label="1:N"];
+  q -> opt [label="1:N"];
+  q -> wb [label="1:N"];
+  q -> ar [label="1:N"];
+  paper -> pq [label="1:N"];
+  q -> pq [label="1:N"];
+  paper -> exam [label="1:N"];
+  exam -> ea [label="1:N"];
+  q -> ea [label="1:N"];
+  ses -> msg [label="1:N"];
+}

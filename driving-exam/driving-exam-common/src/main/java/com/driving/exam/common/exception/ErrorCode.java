@@ -56,6 +56,8 @@ public enum ErrorCode {
     AI_TIMEOUT(4002, "AI 服务响应超时"),
     AI_QUOTA_EXCEEDED(4003, "AI 调用次数超限"),
     AI_RECORD_NOT_FOUND(4004, "AI 问答记录不存在"),
+    AI_RAG_UNAVAILABLE(4005, "知识库检索服务不可用，请稍后重试"),
+    RAG_INGEST_FAILED(4006, "知识库入库失败"),
 
     /* ----------------------------- 5001-5099 聊天 --------------------------- */
     CHAT_SESSION_NOT_FOUND(5001, "会话不存在"),

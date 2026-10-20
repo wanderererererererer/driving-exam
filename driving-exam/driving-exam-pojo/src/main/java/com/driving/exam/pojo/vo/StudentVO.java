@@ -54,4 +54,17 @@ public class StudentVO implements Serializable {
 
     /** 绑定时间（{@code coach_student.bind_time}；列表按此倒序，次级键为绑定记录 id） */
     private LocalDateTime bindTime;
+
+    /**
+     * 当前学习科目（从 student_subject_status 的业务状态推导）：
+     * 按 READY_FOR_EXAM &gt; LEARNING &gt; EXAM_FAILED &gt; NOT_STARTED 选一科；
+     * 没有进行中科目时为 null。不是"最近一次考试科目"。
+     */
+    private String currentSubjectCode;
+
+    /** 当前学习科目的学习阶段（与 currentSubjectCode 同一行）；无进行中科目时为 null */
+    private String currentPhaseStatus;
+
+    /** 当前学习科目的教练确认状态；未设置或无进行中科目时为 null */
+    private String coachConfirmStatus;
 }

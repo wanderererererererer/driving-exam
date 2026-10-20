@@ -1,8 +1,100 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* ==========================================================================
+   驾考智能辅导系统 · 全局设计令牌与公共样式
+   方向：轻量现代浅色；白色/浅灰底，低饱和蓝作为品牌色。
+   注意：变量只定义一次，页面通过 var(--app-*) 复用，不在各页面重复调色。
+   ========================================================================== */
+
+:root {
+  /* Brand & semantic colors */
+  --app-primary: #7597d5;
+  --app-primary-strong: #5f81bf;
+  --app-primary-soft: #e8effb;
+  --app-primary-faint: #f3f7fd;
+
+  --app-bg: #f5f7fa;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f8fafc;
+  --app-border: #dce3ec;
+  --app-border-light: #e8edf3;
+
+  --app-text: #263449;
+  --app-text-regular: #4a5a70;
+  --app-text-secondary: #687589;
+  --app-text-placeholder: #a3adbb;
+
+  --app-success: #5bae7b;
+  --app-warning: #c98f4a;
+  --app-danger: #c96a6a;
+  --app-info: #7d8b9f;
+
+  --app-success-soft: #edf7f1;
+  --app-warning-soft: #fbf4e8;
+  --app-danger-soft: #fbeded;
+  --app-info-soft: #f2f5f8;
+
+  /* Shape & elevation */
+  --app-radius-lg: 16px;
+  --app-radius: 12px;
+  --app-radius-sm: 9px;
+  --app-shadow-sm: 0 2px 8px rgba(38, 52, 73, 0.04);
+  --app-shadow: 0 8px 24px rgba(38, 52, 73, 0.06);
+  --app-shadow-hover: 0 12px 28px rgba(38, 52, 73, 0.09);
+
+  /* Typography */
+  --app-font: 'Inter', 'Helvetica Neue', Helvetica, 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  --app-title-size: 24px;
+  --app-section-size: 16px;
+  --app-body-size: 14px;
+  --app-caption-size: 13px;
+
+  /* Layout */
+  --app-header-height: 64px;
+  --app-aside-width: 224px;
+  --app-page-gap: 20px;
+
+  /* Role accents are applied by .app-layout--* */
+  --role-accent: var(--app-primary);
+  --role-soft: var(--app-primary-soft);
 }
+
+/* Element Plus theme bridge */
+:root {
+  --el-color-primary: var(--app-primary);
+  --el-color-primary-dark-2: var(--app-primary-strong);
+  --el-color-primary-light-3: #93aee0;
+  --el-color-primary-light-5: #a9c0e8;
+  --el-color-primary-light-7: #c7d7f1;
+  --el-color-primary-light-8: #dce6f7;
+  --el-color-primary-light-9: #edf2fa;
+  --el-color-success: var(--app-success);
+  --el-color-warning: var(--app-warning);
+  --el-color-danger: var(--app-danger);
+  --el-color-error: var(--app-danger);
+  --el-color-info: var(--app-info);
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: var(--app-text-regular);
+  --el-text-color-secondary: var(--app-text-secondary);
+  --el-text-color-placeholder: var(--app-text-placeholder);
+  --el-border-color: var(--app-border);
+  --el-border-color-light: var(--app-border-light);
+  --el-border-color-lighter: #eef2f6;
+  --el-border-color-extra-light: #f4f7fa;
+  --el-bg-color-page: var(--app-bg);
+  --el-bg-color: var(--app-surface);
+  --el-fill-color-light: #f5f8fb;
+  --el-fill-color-lighter: #f8fafc;
+  --el-fill-color-blank: var(--app-surface);
+  --el-border-radius-base: var(--app-radius-sm);
+  --el-border-radius-small: 8px;
+  --el-border-radius-round: 999px;
+  --el-font-family: var(--app-font);
+  --el-font-size-base: var(--app-body-size);
+  --el-box-shadow-light: var(--app-shadow-sm);
+  --el-box-shadow: var(--app-shadow);
+}
+
+/* ------------------------------- Base ------------------------------- */
 
 html,
 body,
@@ -11,9 +103,524 @@ body,
 }
 
 body {
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', Arial, sans-serif;
+  margin: 0;
+  font-family: var(--app-font);
+  font-size: var(--app-body-size);
+  color: var(--app-text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--app-text);
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--app-primary-strong);
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--app-primary-soft);
+  color: var(--app-text);
+}
+
+/* ------------------------------ Layout ------------------------------ */
+
+.app-layout {
+  height: 100vh;
+  background: var(--app-bg);
+}
+
+.app-layout--student {
+  --role-accent: #7597d5;
+  --role-soft: #e8effb;
+}
+
+.app-layout--coach {
+  --role-accent: #5e9fb3;
+  --role-soft: #e7f3f5;
+}
+
+.app-layout--admin {
+  --role-accent: #7b86c7;
+  --role-soft: #eceef9;
+}
+
+.app-header {
+  height: var(--app-header-height);
+  padding: 0 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.app-brand__mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--role-soft);
+  color: var(--role-accent);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.app-brand__sub {
+  margin-left: 2px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.app-header__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--app-text-regular);
+  font-size: 13px;
+}
+
+.app-user__avatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--role-soft);
+  color: var(--role-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-body {
+  height: calc(100vh - var(--app-header-height));
+}
+
+.app-aside {
+  width: var(--app-aside-width);
+  padding: 16px 12px;
+  background: var(--app-surface);
+  border-right: 1px solid var(--app-border);
+  overflow-y: auto;
+}
+
+.app-menu {
+  border-right: none;
+  background: transparent;
+}
+
+.app-menu .el-menu-item {
+  height: 44px;
+  line-height: 44px;
+  margin: 4px 0;
+  padding: 0 14px !important;
+  border-radius: 10px;
+  color: var(--app-text-regular);
+  font-weight: 500;
+}
+
+.app-menu .el-menu-item .el-icon {
+  margin-right: 10px;
+  color: var(--app-text-secondary);
+}
+
+.app-menu .el-menu-item:hover {
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+}
+
+.app-menu .el-menu-item.is-active {
+  background: var(--role-soft);
+  color: var(--role-accent);
+  font-weight: 600;
+}
+
+.app-menu .el-menu-item.is-active .el-icon {
+  color: var(--role-accent);
+}
+
+.app-main {
+  padding: 20px 24px;
+  background: var(--app-bg);
+  overflow: auto;
+}
+
+.app-main > * {
+  width: 100%;
+  max-width: 1680px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* --------------------------- Page headings --------------------------- */
+
+.app-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.app-page-title {
+  margin: 0;
+  color: var(--app-text);
+  font-size: var(--app-title-size);
+  font-weight: 650;
+}
+
+.app-page-desc {
+  margin-top: 6px;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
+.app-section-title {
+  color: var(--app-text);
+  font-size: var(--app-section-size);
+  font-weight: 600;
+}
+
+.app-muted {
+  color: var(--app-text-secondary);
+  font-size: var(--app-caption-size);
+}
+
+/* ------------------------------ Cards ------------------------------- */
+
+.el-card {
+  border-radius: var(--app-radius) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-sm) !important;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.el-card.is-hover-shadow:hover,
+.el-card[shadow='hover']:hover {
+  box-shadow: var(--app-shadow-hover) !important;
+  border-color: #cbd7e5 !important;
+}
+
+.el-card__header {
+  padding: 16px 20px !important;
+  border-bottom-color: var(--app-border-light) !important;
+}
+
+.el-card__body {
+  padding: 20px !important;
+}
+
+.el-card__header .el-button.is-link {
+  font-size: 13px;
+}
+
+/* ----------------------------- Controls ----------------------------- */
+
+.el-button {
+  border-radius: var(--app-radius-sm);
+  font-weight: 500;
+  transition: all 0.18s ease;
+}
+
+.el-button:not(.is-link):not(.is-text):not(.is-disabled):hover {
+  transform: translateY(-1px);
+}
+
+.el-button--primary {
+  box-shadow: 0 4px 12px rgba(117, 151, 213, 0.2);
+}
+
+.el-button--default {
+  border-color: var(--app-border);
+  color: var(--app-text-regular);
+}
+
+.el-button.is-link {
+  font-weight: 500;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: var(--app-radius-sm) !important;
+  box-shadow: 0 0 0 1px var(--app-border) inset !important;
+  background: var(--app-surface) !important;
+  transition: box-shadow 0.18s ease;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-7),
+    0 0 0 1px var(--app-primary) inset !important;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px #b8c8de inset !important;
+}
+
+.el-textarea__inner {
+  padding: 10px 12px !important;
+}
+
+.el-form-item__label {
+  color: var(--app-text-regular);
+  font-weight: 500;
+}
+
+.el-form-item {
+  margin-bottom: 18px;
+}
+
+/* ------------------------------- Tables ------------------------------ */
+
+.el-table {
+  --el-table-border-color: var(--app-border-light);
+  --el-table-header-bg-color: var(--app-surface-muted);
+  --el-table-row-hover-bg-color: #f7fafd;
+  --el-table-text-color: var(--app-text-regular);
+  --el-table-header-text-color: var(--app-text-secondary);
+  border-radius: var(--app-radius-sm);
   font-size: 14px;
-  color: #303133;
-  background-color: #f5f7fa;
+}
+
+.el-table th.el-table__cell {
+  background: var(--app-surface-muted) !important;
+  color: var(--app-text-secondary) !important;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.el-table td.el-table__cell {
+  padding: 11px 0;
+}
+
+.el-table__empty-block {
+  min-height: 120px;
+}
+
+.el-pagination {
+  gap: 4px;
+  color: var(--app-text-secondary);
+}
+
+.el-pagination .el-pager li,
+.el-pagination button {
+  border-radius: 8px;
+}
+
+.el-pagination .el-pager li.is-active {
+  background: var(--app-primary-soft);
+  color: var(--app-primary-strong);
+}
+
+/* ------------------------------ Dialogs ------------------------------ */
+
+.el-dialog {
+  border-radius: var(--app-radius-lg) !important;
+  box-shadow: 0 20px 60px rgba(38, 52, 73, 0.16) !important;
+}
+
+.el-dialog__header {
+  padding: 20px 24px 12px !important;
+}
+
+.el-dialog__title {
+  color: var(--app-text) !important;
+  font-weight: 600;
+}
+
+.el-dialog__body {
+  padding: 12px 24px 8px !important;
+}
+
+.el-dialog__footer {
+  padding: 12px 24px 20px !important;
+}
+
+.el-message-box {
+  border-radius: var(--app-radius-lg) !important;
+}
+
+/* ------------------------------- Tags -------------------------------- */
+
+.el-tag {
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.el-tag--small {
+  padding: 0 9px;
+}
+
+/* ------------------------------ Tabs / tree ------------------------------- */
+
+.el-tabs__item {
+  color: var(--app-text-secondary);
+  font-weight: 500;
+}
+
+.el-tabs__item.is-active {
+  color: var(--app-primary-strong);
+  font-weight: 600;
+}
+
+.el-tabs__active-bar {
+  background-color: var(--app-primary);
+}
+
+.el-tree-node__content {
+  height: 38px;
+  border-radius: 8px;
+  color: var(--app-text-regular);
+}
+
+.el-tree-node.is-current > .el-tree-node__content {
+  background: var(--app-primary-soft);
+  color: var(--app-primary-strong);
+  font-weight: 600;
+}
+
+.el-tree-node__content:hover {
+  background: var(--app-surface-muted);
+}
+
+/* ---------------------------- Descriptions ---------------------------- */
+
+.el-descriptions__label {
+  color: var(--app-text-secondary) !important;
+  font-weight: 500 !important;
+}
+
+.el-descriptions__content {
+  color: var(--app-text-regular) !important;
+}
+
+/* ------------------------------ Upload -------------------------------- */
+
+.el-upload-dragger {
+  border-radius: var(--app-radius);
+  border-color: var(--app-border);
+  background: var(--app-surface-muted);
+}
+
+.el-upload-dragger:hover {
+  border-color: var(--app-primary);
+}
+
+/* ---------------------------- Feedback ------------------------------ */
+
+.el-alert {
+  border-radius: var(--app-radius-sm);
+  border: 1px solid transparent;
+}
+
+.el-alert--warning.is-light {
+  background: var(--app-warning-soft);
+  border-color: #f0dfc7;
+}
+
+.el-alert--error.is-light {
+  background: var(--app-danger-soft);
+  border-color: #efd0d0;
+}
+
+.el-alert--info.is-light {
+  background: var(--app-info-soft);
+  border-color: var(--app-border-light);
+}
+
+.el-empty__description p {
+  color: var(--app-text-secondary);
+}
+
+.el-loading-mask {
+  background-color: rgba(245, 247, 250, 0.7);
+}
+
+/* Progress */
+.el-progress-bar__outer {
+  background: #e9eef5;
+}
+
+.el-progress-bar__inner {
+  border-radius: 999px;
+}
+
+/* --------------------------- Utility ------------------------------- */
+
+.app-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.app-links .el-button {
+  margin-left: 0;
+}
+
+.app-divider {
+  height: 1px;
+  background: var(--app-border-light);
+  margin: 18px 0;
+}
+
+/* --------------------------- Responsive ---------------------------- */
+
+@media (max-width: 1200px) {
+  .app-main {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-aside {
+    width: 190px;
+  }
+  .app-brand__sub {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    padding: 0 16px;
+  }
+  .app-main {
+    padding: 16px;
+  }
+  .app-user span {
+    display: none;
+  }
 }

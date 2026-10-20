@@ -14,6 +14,9 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -85,6 +88,31 @@ public class GlobalExceptionHandler {
         log.warn("参数类型不匹配 [{} {}]: {}={}",
                 request.getMethod(), request.getRequestURI(), e.getName(), e.getValue());
         return build(ErrorCode.PARAM_ERROR.getCode(), "参数类型不匹配：" + e.getName());
+    }
+
+    /** 上传文件超过 Spring multipart 限制 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException e,
+                                                                 HttpServletRequest request) {
+        log.warn("上传文件过大 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
+        return build(ErrorCode.PARAM_ERROR.getCode(), "上传文件过大，最大支持 10MB");
+    }
+
+    /** 缺少 multipart 文件字段（例如 Excel 导入未选择文件） */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException e,
+                                                               HttpServletRequest request) {
+        log.warn("缺少上传文件字段 [{} {}]: {}", request.getMethod(), request.getRequestURI(),
+                e.getRequestPartName());
+        return build(ErrorCode.PARAM_ERROR.getCode(), "缺少上传文件字段：" + e.getRequestPartName());
+    }
+
+    /** 其它 multipart 解析异常，统一作为参数错误反馈，避免落到通用 500 */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMultipart(MultipartException e,
+                                                             HttpServletRequest request) {
+        log.warn("文件上传解析失败 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
+        return build(ErrorCode.PARAM_ERROR.getCode(), "文件上传失败，请检查文件格式");
     }
 
     /** 请求路径无对应资源（Spring Boot 3.2 静态资源未命中）：返回 404，不打完整堆栈 */

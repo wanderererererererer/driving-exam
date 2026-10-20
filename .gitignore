@@ -29,6 +29,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+# Docker 部署环境文件（含测试密码/JWT，不得入库）
+docker/.env
+docker/.env.local
 
 # ---------- IDE / 编辑器 ----------
 .idea/
@@ -73,3 +76,6 @@ driving-exam/driving-exam-server/src/main/resources/application.yml
 #   - frontend/.env.development（当前仅 VITE_API_BASE_URL=/api，非密）
 #   - pom.xml / package.json / package-lock.json / *.ts / *.vue / *.java 等源码与依赖清单
 # ============================================================
+
+# Microsoft Word temporary lock files
+~$*

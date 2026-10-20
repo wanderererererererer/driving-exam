@@ -1,0 +1,30 @@
+digraph excel {
+  rankdir=TB;
+  graph [fontname="Noto Sans CJK SC", bgcolor="white", pad="0.2", nodesep="0.35", ranksep="0.32"];
+  node [fontname="Noto Sans CJK SC", fontsize=10, shape=box, style="rounded,filled", fillcolor="#F5F7FA", color="#7597D5", penwidth=1.2, margin="0.12,0.06"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#5F6B7A", arrowsize=0.7];
+
+  upload [label="上传 .xlsx / .xls 文件", fillcolor="#E8EFFB"];
+  filecheck [label="扩展名与 10MB 大小校验", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  header [label="读取工作簿与固定表头", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  rows [label="逐行解析 14 列\n收集行号与字段"];
+  semantic [label="调用 validateQuestion\n科目/知识点/题型/选项/答案/状态", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  duplicate [label="文件内与库内题干重复检查", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  errors [label="汇总 total / success / failed / errors", fillcolor="#FBEDED", color="#C96A6A"];
+  reject [label="整批不写入\nsuccess=0", fillcolor="#FBEDED", color="#C96A6A"];
+  tx [label="@Transactional 事务内逐条创建题目", fillcolor="#EDF7F1", color="#5BAE7B"];
+  done [label="返回导入结果", fillcolor="#EDF7F1", color="#5BAE7B"];
+
+  upload -> filecheck;
+  filecheck -> errors [label="否"];
+  filecheck -> header [label="是"];
+  header -> errors [label="表头不符"];
+  header -> rows [label="通过"];
+  rows -> semantic;
+  semantic -> errors [label="存在错误"];
+  semantic -> duplicate [label="通过"];
+  duplicate -> errors [label="重复"];
+  duplicate -> tx [label="通过"];
+  errors -> reject;
+  tx -> done;
+}

@@ -66,13 +66,13 @@ function onNewSession(): void {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #dce3ec;
 }
 .aiv__title {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: #263449;
 }
 .aiv__actions {
   display: flex;

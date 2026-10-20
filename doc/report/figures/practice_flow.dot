@@ -1,0 +1,31 @@
+digraph practice {
+  rankdir=TB;
+  graph [fontname="Noto Sans CJK SC", bgcolor="white", pad="0.2", nodesep="0.35", ranksep="0.32"];
+  node [fontname="Noto Sans CJK SC", fontsize=10, shape=box, style="rounded,filled", fillcolor="#F5F7FA", color="#7597D5", penwidth=1.2, margin="0.12,0.06"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#5F6B7A", arrowsize=0.7];
+
+  mode [label="选择顺序 / 章节 / 随机练习", fillcolor="#E8EFFB"];
+  load [label="加载题目 VO\n不返回答案与解析"];
+  submit [label="提交答案"];
+  norm [label="AnswerGrader 归一化\nNFKC → trim → 大写"];
+  judge [label="按题型判分", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  record [label="写入 answer_record\nsource=PRACTICE/RETRY"];
+  wrong [label="答错或重练答错？", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  wrongbook [label="wrong_book upsert\nwrong_count+1，mastered=0"];
+  mastered [label="重练答对？", shape=diamond, fillcolor="#FFF7E6", color="#C98F4A"];
+  mark [label="标记 mastered=1"];
+  analysis [label="按作答与错题数据计算\n学情、掌握度与趋势"];
+  next [label="返回判题结果并进入下一题", fillcolor="#EDF7F1", color="#5BAE7B"];
+
+  mode -> load -> submit -> norm -> judge;
+  judge -> record [label="可判分"];
+  record -> wrong;
+  wrong -> wrongbook [label="是"];
+  wrong -> mastered [label="否"];
+  wrongbook -> mastered;
+  mastered -> mark [label="是"];
+  mastered -> analysis [label="否"];
+  mark -> analysis;
+  analysis -> next;
+  judge -> next [label="题型不支持 / 参数错误", style=dashed, color="#C96A6A"];
+}

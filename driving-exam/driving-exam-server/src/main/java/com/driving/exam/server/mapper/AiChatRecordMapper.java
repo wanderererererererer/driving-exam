@@ -52,5 +52,9 @@ public interface AiChatRecordMapper extends BaseMapper<AiChatRecord> {
     @Select("SELECT COUNT(DISTINCT session_id) FROM ai_chat_record "
             + "WHERE user_id = #{userId} AND session_id IS NOT NULL")
     long countSessions(@Param("userId") Long userId);
+
+    /** 管理员统计：曾使用 AI 问答的去重用户数。 */
+    @Select("SELECT COUNT(DISTINCT user_id) FROM ai_chat_record")
+    long countDistinctUsers();
 }
 

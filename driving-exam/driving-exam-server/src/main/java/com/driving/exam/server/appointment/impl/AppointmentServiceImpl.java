@@ -17,6 +17,7 @@ import com.driving.exam.server.mapper.AppointmentMapper;
 import com.driving.exam.server.mapper.CoachStudentMapper;
 import com.driving.exam.server.mapper.UserMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -39,8 +40,9 @@ import java.util.stream.Collectors;
  *       顺序反了会泄露"这条记录存在"给非本人。</li>
  *   <li><b>防 N+1</b>：列表先把记录查出来，再收集去重后的用户 ID，<b>一次 {@code IN} 查 {@code sys_user}</b>，
  *       然后在内存里装配姓名与电话——绝不循环里逐条查库。</li>
- *   <li><b>不加 {@code @Transactional}</b>：五个写方法（create / cancel / approve / reject / complete）
- *       都是单表单条写，SQL 自身原子，与刷题作答、AI 落库一致；只读方法也不加。</li>
+ *   <li><b>创建预约加事务和教练行锁</b>：同一教练的并发创建在数据库层串行化，
+ *       避免“先查冲突、后插入”两个请求同时看到空档；取消/拒绝/完成也使用预约行锁，
+ *       防止两个并发状态变更同时读到旧状态后互相覆盖。</li>
  * </ol>
  *
  * <h3>关于 {@code sys_user} 的逻辑删除</h3>
@@ -102,8 +104,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         List<CoachVO> list = new ArrayList<>(coachIds.size());
         for (Long coachId : coachIds) {
             User coach = userMap.get(coachId);
-            if (coach == null) {
-                continue; // 选择对象要可用：教练账号已删 → 跳过，不给学员一张点不了的卡片
+            if (coach == null || coach.getStatus() == null || coach.getStatus() != 1) {
+                continue; // 选择对象要可用：教练账号已删/禁用 → 跳过，不给学员一张点不了的卡片
             }
             list.add(toCoachVO(coach));
         }
@@ -111,8 +113,19 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void createAppointment(Long studentId, AppointmentCreateDTO dto) {
-        // ① 该教练必须是本人"有效绑定"的教练（coach_student 无 deleted，用 status=1）
+        // ① 先锁定教练账号行：这是本事务的第一次数据库读取，确保后续一致性读能看到
+        //    前一笔已提交的预约；同一教练的并发创建串行化，不同教练互不阻塞。
+        User coach = userMapper.selectByIdForUpdate(dto.getCoachId());
+        if (coach == null) {
+            throw new BusinessException(ErrorCode.STUDENT_NOT_BOUND);
+        }
+        if (coach.getStatus() == null || coach.getStatus() != 1) {
+            throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
+        }
+
+        // ② 该教练必须是本人"有效绑定"的教练（coach_student 无 deleted，用 status=1）
         Long bound = coachStudentMapper.selectCount(new LambdaQueryWrapper<CoachStudent>()
                 .eq(CoachStudent::getStudentId, studentId)
                 .eq(CoachStudent::getCoachId, dto.getCoachId())
@@ -121,7 +134,7 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new BusinessException(ErrorCode.STUDENT_NOT_BOUND);
         }
 
-        // ② 时段冲突：占用只算 PENDING / CONFIRMED —— 必须排除终态，
+        // ③ 时段冲突：占用只算 PENDING / CONFIRMED —— 必须排除终态，
         //    否则"取消 / 拒绝过的时段会永久占位"，学员再也约不上（最容易写错的一条）
         Long conflict = appointmentMapper.selectCount(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getCoachId, dto.getCoachId())
@@ -132,7 +145,7 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new BusinessException(ErrorCode.APPOINTMENT_TIME_CONFLICT);
         }
 
-        // ③ 落库（单表单条写，不加事务；"先查后插"的并发竞态记录在案、课设不处理）
+        // ④ 落库（与锁/冲突检查处于同一事务；提交后教练行锁释放）
         Appointment appointment = new Appointment();
         appointment.setStudentId(studentId);
         appointment.setCoachId(dto.getCoachId());
@@ -174,8 +187,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void cancelMyAppointment(Long studentId, Long appointmentId) {
-        Appointment appointment = loadStudentOwned(studentId, appointmentId); // 先归属、后状态
+        Appointment appointment = loadStudentOwnedForUpdate(studentId, appointmentId); // 归属 + 行锁
         if (!AppointmentStatus.PENDING.name().equals(appointment.getStatus())) {
             // 仅 PENDING 可取消；CONFIRMED 需联系教练（api-design §5 第 2 条）
             throw new BusinessException(ErrorCode.APPOINTMENT_CANCEL_NOT_ALLOWED);
@@ -208,8 +222,26 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    public PageResult<AppointmentVO> listAllAppointments(AppointmentStatus status,
+                                                         int pageNum, int pageSize) {
+        int current = Math.max(pageNum, 1);
+        int size = (pageSize < 1) ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+        String statusName = (status == null) ? null : status.name();
+
+        // 管理员只读全量；不按 student_id / coach_id 收窄，排序与两端列表保持一致。
+        Page<Appointment> page = appointmentMapper.selectPage(new Page<>(current, size),
+                new LambdaQueryWrapper<Appointment>()
+                        .eq(statusName != null, Appointment::getStatus, statusName)
+                        .orderByDesc(Appointment::getCreateTime)
+                        .orderByDesc(Appointment::getId));
+
+        return toPageResult(page);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void approveAppointment(Long coachId, Long appointmentId) {
-        Appointment appointment = loadCoachOwned(coachId, appointmentId); // 先归属、后状态
+        Appointment appointment = loadCoachOwnedForUpdate(coachId, appointmentId); // 归属 + 行锁
         if (!AppointmentStatus.PENDING.name().equals(appointment.getStatus())) {
             throw new BusinessException(ErrorCode.APPOINTMENT_STATUS_ILLEGAL);
         }
@@ -218,8 +250,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void rejectAppointment(Long coachId, Long appointmentId, String coachRemark) {
-        Appointment appointment = loadCoachOwned(coachId, appointmentId); // 先归属、后状态
+        Appointment appointment = loadCoachOwnedForUpdate(coachId, appointmentId); // 归属 + 行锁
         if (!AppointmentStatus.PENDING.name().equals(appointment.getStatus())) {
             throw new BusinessException(ErrorCode.APPOINTMENT_STATUS_ILLEGAL);
         }
@@ -230,8 +263,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void completeAppointment(Long coachId, Long appointmentId) {
-        Appointment appointment = loadCoachOwned(coachId, appointmentId); // 先归属、后状态
+        Appointment appointment = loadCoachOwnedForUpdate(coachId, appointmentId); // 归属 + 行锁
         if (!AppointmentStatus.CONFIRMED.name().equals(appointment.getStatus())) {
             throw new BusinessException(ErrorCode.APPOINTMENT_STATUS_ILLEGAL);
         }
@@ -257,6 +291,15 @@ public class AppointmentServiceImpl implements AppointmentService {
         return appointment;
     }
 
+    /** 学员所属预约的行锁版本，供写状态共用；语义同 {@link #loadStudentOwned}。 */
+    private Appointment loadStudentOwnedForUpdate(Long studentId, Long appointmentId) {
+        Appointment appointment = appointmentMapper.selectStudentOwnedForUpdate(appointmentId, studentId);
+        if (appointment == null) {
+            throw new BusinessException(ErrorCode.APPOINTMENT_NOT_FOUND);
+        }
+        return appointment;
+    }
+
     /**
      * 教练视角的归属校验：{@code WHERE id = ? AND coach_id = ?}。语义同 {@link #loadStudentOwned}。
      *
@@ -267,6 +310,15 @@ public class AppointmentServiceImpl implements AppointmentService {
         Appointment appointment = appointmentMapper.selectOne(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getId, appointmentId)
                 .eq(Appointment::getCoachId, coachId));
+        if (appointment == null) {
+            throw new BusinessException(ErrorCode.APPOINTMENT_NOT_FOUND);
+        }
+        return appointment;
+    }
+
+    /** 教练所属预约的行锁版本，供审批/拒绝/完成共用；语义同 {@link #loadCoachOwned}。 */
+    private Appointment loadCoachOwnedForUpdate(Long coachId, Long appointmentId) {
+        Appointment appointment = appointmentMapper.selectCoachOwnedForUpdate(appointmentId, coachId);
         if (appointment == null) {
             throw new BusinessException(ErrorCode.APPOINTMENT_NOT_FOUND);
         }

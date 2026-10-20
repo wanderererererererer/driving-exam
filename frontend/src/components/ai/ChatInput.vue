@@ -61,7 +61,7 @@ function onKeydown(e: KeyboardEvent): void {
   align-items: flex-end;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid #dce3ec;
   background: #fff;
 }
 .ci__send {

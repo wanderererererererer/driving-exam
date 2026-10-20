@@ -30,6 +30,9 @@ public class KPTreeNodeVO implements Serializable {
     /** 排序 */
     private Integer sortOrder;
 
+    /** 知识点描述（管理端编辑回显和 AI/展示素材使用） */
+    private String description;
+
     /** 该知识点（含子孙知识点）下的题目数量；建树时由一次 GROUP BY 查询结果填充 */
     private Integer questionCount;
 

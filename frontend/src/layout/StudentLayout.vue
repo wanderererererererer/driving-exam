@@ -16,20 +16,27 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
+const displayName = computed(
+  () => userStore.userInfo?.realName || userStore.userInfo?.username || '学员',
+)
+const avatarText = computed(() => displayName.value.slice(0, 1))
+
 /** 有独立「科目首页」的科目（科目二/三 是预约类，首页还没建） */
 const SUBJECT_HOME_PATHS = ['/student/subject/SUBJECT_1', '/student/subject/SUBJECT_4']
 
-/** 是否全屏路由（如模拟考试答题页）：不渲染侧边栏与顶栏，只留页面内的唯一退出入口 */
+/** 是否全屏路由（如模拟考试答题页）：不渲染侧边栏与顶栏 */
 const isFullscreen = computed(() => route.meta.fullscreen === true)
 
-/**
- * 菜单高亮。
- *
- * <p>刷题页 / 错题本页的路径里不含科目（科目在 query 的 subjectCode 上），
- * 若不处理，进入刷题页后侧边菜单会"失去高亮"。这里把它们映射回对应科目的菜单项。</p>
- */
+/** 菜单高亮：刷题/错题/分析页通过 query 回映到科目首页 */
 const activeMenu = computed(() => {
   if (route.path.startsWith('/student/subject/')) {
+    return route.path
+  }
+  if (route.path === '/student/appointment') {
+    const sc = String(route.query.subjectCode ?? '')
+    if (sc === 'SUBJECT_2' || sc === 'SUBJECT_3') {
+      return `/student/appointment?subjectCode=${sc}`
+    }
     return route.path
   }
   const sc = String(route.query.subjectCode ?? '')
@@ -40,8 +47,12 @@ const activeMenu = computed(() => {
   return route.path
 })
 
-const handleLogout = () => {
-  ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' })
+const handleLogout = (): void => {
+  ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
+    type: 'warning',
+    confirmButtonText: '退出',
+    cancelButtonText: '取消',
+  })
     .then(() => {
       userStore.logout()
       router.push('/login')
@@ -51,34 +62,37 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <!-- 全屏路由（模拟考试答题页）：隐藏侧边栏与顶栏，避免考试期间跳转到其他模块 -->
   <router-view v-if="isFullscreen" />
 
-  <el-container v-else class="layout">
-    <el-header class="layout__header">
-      <div class="layout__brand">驾考智能辅导系统 · 学员端</div>
-      <div class="layout__user">
-        <span class="layout__name">
-          {{ userStore.userInfo?.realName || userStore.userInfo?.username || '未登录' }}
-        </span>
+  <el-container v-else class="app-layout app-layout--student">
+    <el-header class="app-header">
+      <div class="app-brand">
+        <span class="app-brand__mark">驾</span>
+        <span>驾考智能辅导系统</span>
+        <span class="app-brand__sub">学员端</span>
+      </div>
+      <div class="app-header__right">
+        <div class="app-user">
+          <span class="app-user__avatar">{{ avatarText }}</span>
+          <span>{{ displayName }}</span>
+        </div>
         <el-button link type="primary" @click="handleLogout">退出登录</el-button>
       </div>
     </el-header>
 
-    <el-container class="layout__body">
-      <el-aside width="210px" class="layout__aside">
-        <el-menu :default-active="activeMenu" router class="layout__menu">
+    <el-container class="app-body">
+      <el-aside class="app-aside">
+        <el-menu :default-active="activeMenu" router class="app-menu">
           <el-menu-item index="/student/dashboard">
-            <el-icon><HomeFilled /></el-icon><span>首页</span>
+            <el-icon><HomeFilled /></el-icon><span>工作台</span>
           </el-menu-item>
           <el-menu-item index="/student/subject/SUBJECT_1">
             <el-icon><EditPen /></el-icon><span>科目一</span>
           </el-menu-item>
-          <!-- 科目二/三 是预约类，独立首页待建；暂落到占位页 -->
-          <el-menu-item index="/student/subject2">
+          <el-menu-item index="/student/appointment?subjectCode=SUBJECT_2">
             <el-icon><Van /></el-icon><span>科目二</span>
           </el-menu-item>
-          <el-menu-item index="/student/subject3">
+          <el-menu-item index="/student/appointment?subjectCode=SUBJECT_3">
             <el-icon><Van /></el-icon><span>科目三</span>
           </el-menu-item>
           <el-menu-item index="/student/subject/SUBJECT_4">
@@ -96,47 +110,9 @@ const handleLogout = () => {
         </el-menu>
       </el-aside>
 
-      <el-main class="layout__main">
+      <el-main class="app-main">
         <router-view />
       </el-main>
     </el-container>
   </el-container>
 </template>
-
-<style scoped>
-.layout {
-  height: 100vh;
-}
-.layout__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
-}
-.layout__brand {
-  font-size: 18px;
-  font-weight: 600;
-}
-.layout__user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.layout__name {
-  color: #606266;
-}
-.layout__body {
-  height: calc(100vh - 60px);
-}
-.layout__aside {
-  background: #fff;
-  border-right: 1px solid #e4e7ed;
-}
-.layout__menu {
-  border-right: none;
-}
-.layout__main {
-  background: #f5f7fa;
-}
-</style>

@@ -10,12 +10,27 @@ import com.driving.exam.pojo.dto.StudentUpdateDTO;
 import com.driving.exam.pojo.entity.CoachStudent;
 import com.driving.exam.pojo.entity.StudentSubjectStatus;
 import com.driving.exam.pojo.entity.User;
+import com.driving.exam.pojo.enums.WrongBookCategory;
+import com.driving.exam.pojo.vo.AnalysisOverviewVO;
+import com.driving.exam.pojo.vo.ExamRecordVO;
+import com.driving.exam.pojo.vo.KPStatVO;
 import com.driving.exam.pojo.vo.StudentVO;
 import com.driving.exam.pojo.vo.SubjectStatusVO;
+import com.driving.exam.pojo.vo.WrongBookItemVO;
+import com.driving.exam.pojo.vo.WrongBookSummaryVO;
+import com.driving.exam.server.analysis.AnalysisService;
+import com.driving.exam.server.coach.AiSuggestVO;
 import com.driving.exam.server.coach.CoachStudentService;
+import com.driving.exam.server.coach.LearningDataVO;
+import com.driving.exam.server.exam.ExamService;
+import com.driving.exam.server.integration.deepseek.DeepSeekClient;
+import com.driving.exam.server.integration.deepseek.dto.ChatMessage;
+import com.driving.exam.server.integration.deepseek.dto.ChatResult;
 import com.driving.exam.server.mapper.CoachStudentMapper;
 import com.driving.exam.server.mapper.StudentSubjectStatusMapper;
 import com.driving.exam.server.mapper.UserMapper;
+import com.driving.exam.server.service.WrongBookService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +43,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,12 +64,15 @@ import java.util.stream.Collectors;
  *       解绑是单表单条写，均不加——与预约模块、{@code ExamFinalizer} 的判据一致。</li>
  * </ol>
  *
- * <p><b>{@code student_subject_status} 的写入边界</b>：本类只写 {@code status} 与 {@code coach_remark}
- * 两列（走 {@code upsertCoachFields}）。{@code mock_pass_count} / {@code last_mock_score} 由
- * {@code ExamFinalizer} 在交卷时维护，本类<b>不得覆盖</b>；{@code study_progress} 等列当前无写入方。</p>
+ * <p><b>{@code student_subject_status} 的写入边界</b>：本类通过
+ * {@code upsertCoachFields} 写 {@code status}/{@code coach_remark}，通过
+ * {@code upsertAiSuggestion} 写建议字段，通过 {@code upsertCoachConfirm} 写确认状态。
+ * {@code mock_pass_count} / {@code last_mock_score} 由 {@code ExamFinalizer} 在交卷时维护，
+ * 本类<b>不得覆盖</b>；{@code study_progress} 等列当前无写入方。</p>
  *
  * <p>设计依据：{@code doc/coach-student-design.md}（Step 0 定稿）。</p>
  */
+@Slf4j
 @Service
 public class CoachStudentServiceImpl implements CoachStudentService {
 
@@ -82,19 +101,43 @@ public class CoachStudentServiceImpl implements CoachStudentService {
     /** 科目进度缺失时的默认学习阶段（与数据库列默认值一致） */
     private static final String STATUS_NOT_STARTED = "NOT_STARTED";
 
+    /** 系统建议值（student_subject_status.exam_ready_suggest） */
+    private static final String SUGGEST_READY = "READY";
+    private static final String SUGGEST_NEED_MORE = "NEED_MORE";
+    private static final String SUGGEST_NEED_HELP = "NEED_HELP";
+
+    /** 教练确认值（student_subject_status.coach_confirm_status） */
+    private static final Set<String> CONFIRM_STATUSES =
+            Set.of("CONFIRMED_READY", "NOT_READY", "NEED_HELP");
+
+    /** AI 提示词中最多列出的薄弱知识点数量 */
+    private static final int AI_PROMPT_WEAK_LIMIT = 5;
+
     private final CoachStudentMapper coachStudentMapper;
     private final UserMapper userMapper;
     private final StudentSubjectStatusMapper studentSubjectStatusMapper;
     private final PasswordEncoder passwordEncoder;
+    private final AnalysisService analysisService;
+    private final WrongBookService wrongBookService;
+    private final ExamService examService;
+    private final DeepSeekClient deepSeekClient;
 
     public CoachStudentServiceImpl(CoachStudentMapper coachStudentMapper,
                                    UserMapper userMapper,
                                    StudentSubjectStatusMapper studentSubjectStatusMapper,
-                                   PasswordEncoder passwordEncoder) {
+                                   PasswordEncoder passwordEncoder,
+                                   AnalysisService analysisService,
+                                   WrongBookService wrongBookService,
+                                   ExamService examService,
+                                   DeepSeekClient deepSeekClient) {
         this.coachStudentMapper = coachStudentMapper;
         this.userMapper = userMapper;
         this.studentSubjectStatusMapper = studentSubjectStatusMapper;
         this.passwordEncoder = passwordEncoder;
+        this.analysisService = analysisService;
+        this.wrongBookService = wrongBookService;
+        this.examService = examService;
+        this.deepSeekClient = deepSeekClient;
     }
 
     /* ============================== 1. 我的学员列表 ============================== */
@@ -117,8 +160,11 @@ public class CoachStudentServiceImpl implements CoachStudentService {
         // （page.getRecords() 为空时 loadUserMap 直接返回空 Map，不会拼出 IN ()）
         Map<Long, User> userMap = loadUserMap(
                 page.getRecords().stream().map(CoachStudent::getStudentId).collect(Collectors.toList()));
+        // 防 N+1：本页学员一次 IN 查 student_subject_status，内存推导当前科目/确认状态
+        Map<Long, StudentSubjectStatus> currentStatusMap = loadCurrentStatusMap(
+                page.getRecords().stream().map(CoachStudent::getStudentId).collect(Collectors.toList()));
         List<StudentVO> records = page.getRecords().stream()
-                .map(bind -> toStudentVO(bind, userMap))
+                .map(bind -> toStudentVO(bind, userMap, currentStatusMap))
                 .collect(Collectors.toList());
 
         // 未绑定任何学员时，这里得到 total=0、records=[] 的正常 PageResult —— 不是错误。
@@ -161,6 +207,9 @@ public class CoachStudentServiceImpl implements CoachStudentService {
         } else if (!ROLE_STUDENT.equals(student.getRole())) {
             // ③ 账号已存在但不是学员 → 不允许被"绑成"学员
             throw new BusinessException(ErrorCode.ROLE_MISMATCH);
+        } else if (student.getStatus() == null || student.getStatus() != USER_STATUS_NORMAL) {
+            // 已禁用学员不允许被绑定/创建新绑定；历史数据仍保留
+            throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
         }
 
         // ④ 绑定：先看这对 (coach_id, student_id) 是否已有记录（唯一键 uk_coach_student 保证至多一条）
@@ -249,7 +298,329 @@ public class CoachStudentServiceImpl implements CoachStudentService {
         return list;
     }
 
+    /* ========================= 6. 学员学习数据 ========================= */
+
+    @Override
+    public LearningDataVO getLearningData(Long coachId, Long bindId, String subjectCode,
+                                          int pageNum, int pageSize) {
+        // ① 先归属：不存在 / 不是当前教练 / 已解绑，统一 3102；studentId 只从该记录反查
+        CoachStudent bind = loadOwnedActive(coachId, bindId);
+
+        // ② 再校验科目；既有分析/考试历史均按科目统计，不接受空白或未知科目
+        String subject = requireSubjectCode(subjectCode);
+        Long studentId = bind.getStudentId();
+
+        // ③ 全部复用既有 Service 的统计口径；本方法只读，不写任何业务表
+        LearningDataVO vo = new LearningDataVO();
+        vo.setStudentId(studentId);
+        vo.setSubjectCode(subject);
+
+        AnalysisOverviewVO overview = analysisService.overview(studentId, subject);
+        vo.setOverview(overview);
+
+        WrongBookSummaryVO wrongBookSummary = wrongBookService.summary(studentId, subject);
+        vo.setWrongBookSummary(wrongBookSummary);
+
+        List<KPStatVO> stats = analysisService.knowledge(studentId, subject);
+        List<KPStatVO> weak = (stats == null)
+                ? Collections.<KPStatVO>emptyList()
+                : stats.stream()
+                        .filter(item -> Boolean.TRUE.equals(item.getIsWeak()))
+                        .collect(Collectors.toList());
+        vo.setWeakKnowledgePoints(weak);
+
+        // 分页、排序、只统计已结束考试的规则全部沿用学员考试历史接口
+        vo.setMockExamHistory(examService.history(studentId, subject, pageNum, pageSize));
+        return vo;
+    }
+
+    /* ========================= 7. 学员错题数据 ========================= */
+
+    @Override
+    public PageResult<WrongBookItemVO> listStudentWrongBook(Long coachId, Long bindId,
+                                                            String subjectCode,
+                                                            WrongBookCategory category,
+                                                            int pageNum, int pageSize) {
+        // ① 先归属：不存在 / 不是当前教练 / 已解绑，统一 3102；失败时绝不查询错题
+        CoachStudent bind = loadOwnedActive(coachId, bindId);
+
+        // ② 分页归一化沿用教练端既有规则（页码最小 1、每页默认 10、上限 20）
+        int current = Math.max(pageNum, 1);
+        int size = pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+
+        // ③ 复用学员端错题本 Service：分类口径、排序、防 N+1 全部保持一致
+        return wrongBookService.list(bind.getStudentId(), subjectCode, category, current, size);
+    }
+
+    /* ========================= 8. AI 学习建议 ========================= */
+
+    @Override
+    public AiSuggestVO generateAiSuggest(Long coachId, Long bindId, String subjectCode) {
+        // ① 先归属：失败统一 3102，且不会调用 AI / 分析 / 错题服务
+        CoachStudent bind = loadOwnedActive(coachId, bindId);
+        String subject = requireSubjectCode(subjectCode);
+        Long studentId = bind.getStudentId();
+
+        // ② 复用既有学情分析和错题统计；不重复实现掌握度/错题分类
+        AnalysisOverviewVO overview = analysisService.overview(studentId, subject);
+        List<KPStatVO> stats = analysisService.knowledge(studentId, subject);
+        WrongBookSummaryVO wrongBook = wrongBookService.summary(studentId, subject);
+        PageResult<ExamRecordVO> exams = examService.history(studentId, subject, 1, 5);
+
+        String examReadySuggest = decideExamReadySuggest(overview);
+        String ruleSuggestion = buildRuleSuggestion(overview, stats, wrongBook);
+        String prompt = buildAiPrompt(subject, overview, stats, wrongBook, exams);
+
+        // ③ 调用既有 DeepSeek 客户端；失败时由本业务层降级为规则建议
+        String aiSuggestion = null;
+        boolean aiSuccess = false;
+        String degradedReason = null;
+        try {
+            ChatResult result = deepSeekClient.chat(List.of(
+                    ChatMessage.system("你是驾考教练助手。只能依据给定的学情数据给出复习建议，"
+                            + "不得编造未提供的数据；用不超过 200 字给出 2~3 条可执行建议。"),
+                    ChatMessage.user(prompt)));
+            if (result == null || !StringUtils.hasText(result.getContent())) {
+                throw new BusinessException(ErrorCode.AI_CALL_FAILED);
+            }
+            aiSuggestion = result.getContent().trim();
+            aiSuccess = true;
+        } catch (BusinessException e) {
+            degradedReason = aiFailureReason(e.getCode());
+            log.warn("教练端 AI 建议生成失败，降级为规则建议 code={} reason={}",
+                    e.getCode(), degradedReason);
+        }
+
+        LocalDateTime aiSuggestTime = aiSuccess ? LocalDateTime.now() : null;
+        String suggestion = aiSuccess ? aiSuggestion : ruleSuggestion;
+
+        // ④ 覆盖本次建议：AI 失败时 ai_suggest/ai_suggest_time 写 null，避免伪造“AI 成功”
+        //    新建议不重置教练确认状态；确认与 AI 建议是独立职责
+        studentSubjectStatusMapper.upsertAiSuggestion(
+                studentId, subject, examReadySuggest,
+                aiSuccess ? aiSuggestion : null, aiSuggestTime);
+
+        // 生成新建议不重置确认状态；README/设计约定中确认与 AI 建议独立。
+        // 由于表没有“建议版本”字段，确认状态可能来自更早一次建议，这是已知数据语义限制。
+        StudentSubjectStatus saved = studentSubjectStatusMapper.selectOne(
+                new LambdaQueryWrapper<StudentSubjectStatus>()
+                        .eq(StudentSubjectStatus::getStudentId, studentId)
+                        .eq(StudentSubjectStatus::getSubjectCode, subject));
+
+        AiSuggestVO vo = new AiSuggestVO();
+        vo.setStudentId(studentId);
+        vo.setSubjectCode(subject);
+        vo.setExamReadySuggest(examReadySuggest);
+        vo.setSuggestion(suggestion);
+        vo.setSource(aiSuccess ? AiSuggestVO.SOURCE_AI : AiSuggestVO.SOURCE_RULE);
+        vo.setAiSuccess(aiSuccess);
+        vo.setDegraded(!aiSuccess);
+        vo.setDegradedReason(degradedReason);
+        vo.setAiSuggestTime(aiSuggestTime);
+        vo.setCoachConfirmStatus(saved == null ? null : saved.getCoachConfirmStatus());
+        return vo;
+    }
+
+    @Override
+    public AiSuggestVO getSavedAiSuggest(Long coachId, Long bindId, String subjectCode) {
+        // ① 先归属：失败统一 3102，且不会读取建议行
+        CoachStudent bind = loadOwnedActive(coachId, bindId);
+        String subject = requireSubjectCode(subjectCode);
+        Long studentId = bind.getStudentId();
+
+        // ② 只读已保存行；不调用 AI、不生成规则文本、不写库
+        StudentSubjectStatus row = studentSubjectStatusMapper.selectOne(
+                new LambdaQueryWrapper<StudentSubjectStatus>()
+                        .eq(StudentSubjectStatus::getStudentId, studentId)
+                        .eq(StudentSubjectStatus::getSubjectCode, subject));
+        if (row == null) {
+            return null;
+        }
+
+        boolean hasAi = StringUtils.hasText(row.getAiSuggest());
+        boolean hasRule = StringUtils.hasText(row.getExamReadySuggest());
+        if (!hasAi && !hasRule) {
+            return null;
+        }
+
+        AiSuggestVO vo = new AiSuggestVO();
+        vo.setStudentId(studentId);
+        vo.setSubjectCode(subject);
+        vo.setExamReadySuggest(row.getExamReadySuggest());
+        vo.setCoachConfirmStatus(row.getCoachConfirmStatus());
+
+        if (hasAi) {
+            // 当前写入约定：只有 AI 成功才写 ai_suggest/ai_suggest_time
+            vo.setSuggestion(row.getAiSuggest());
+            vo.setSource(AiSuggestVO.SOURCE_AI);
+            vo.setAiSuccess(true);
+            vo.setDegraded(false);
+            vo.setDegradedReason(null);
+            vo.setAiSuggestTime(row.getAiSuggestTime());
+        } else {
+            // 规则建议只持久化了 exam_ready_suggest 等级，完整文本未保存，不能伪造
+            vo.setSuggestion(null);
+            vo.setSource(AiSuggestVO.SOURCE_RULE);
+            vo.setAiSuccess(false);
+            vo.setDegraded(true);
+            vo.setDegradedReason(null);
+            vo.setAiSuggestTime(null);
+        }
+        return vo;
+    }
+
+    @Override
+    public void confirmSuggestion(Long coachId, Long bindId, String subjectCode, String confirmStatus) {
+        // ① 先归属：失败统一 3102；确认不依赖 AI/规则建议是否存在
+        CoachStudent bind = loadOwnedActive(coachId, bindId);
+        String subject = requireSubjectCode(subjectCode);
+        String status = confirmStatus == null ? "" : confirmStatus.trim().toUpperCase();
+        if (!CONFIRM_STATUSES.contains(status)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR);
+        }
+
+        // ② 独立 upsert：无建议行时创建确认行，已有确认时允许修改；不触碰建议文本/时间
+        studentSubjectStatusMapper.upsertCoachConfirm(bind.getStudentId(), subject, status);
+    }
+
     /* ============================== 私有工具 ============================== */
+
+    /** 依据既有学情总览给出系统建议；阈值是本接口最小实现的可解释规则。 */
+    private String decideExamReadySuggest(AnalysisOverviewVO overview) {
+        int total = intValue(overview == null ? null : overview.getTotalQuestions());
+        int answered = intValue(overview == null ? null : overview.getAnsweredQuestions());
+        int weak = intValue(overview == null ? null : overview.getWeakCount());
+        Double rate = overview == null ? null : overview.getCorrectRate();
+        Double progress = overview == null ? null : overview.getProgress();
+
+        if (total == 0 || answered == 0) {
+            return SUGGEST_NEED_MORE;
+        }
+        if (weak > 0) {
+            return SUGGEST_NEED_HELP;
+        }
+        if (progress != null && progress >= 1.0 && rate != null && rate >= 0.8) {
+            return SUGGEST_READY;
+        }
+        return SUGGEST_NEED_MORE;
+    }
+
+    /** 规则型兜底建议；明确不宣称由 AI 生成。 */
+    private String buildRuleSuggestion(AnalysisOverviewVO overview,
+                                       List<KPStatVO> stats,
+                                       WrongBookSummaryVO wrongBook) {
+        int answered = intValue(overview == null ? null : overview.getAnsweredQuestions());
+        int total = intValue(overview == null ? null : overview.getTotalQuestions());
+        int weakCount = intValue(overview == null ? null : overview.getWeakCount());
+        Double rate = overview == null ? null : overview.getCorrectRate();
+        Double progress = overview == null ? null : overview.getProgress();
+
+        if (total == 0 || answered == 0) {
+            return "该学员尚未开始本科目练习，建议先完成顺序练习，熟悉基础知识点并整理错题。";
+        }
+
+        List<KPStatVO> weak = weakPoints(stats);
+        if (weakCount > 0 || !weak.isEmpty()) {
+            String names = weak.stream()
+                    .map(KPStatVO::getKnowledgePointName)
+                    .filter(StringUtils::hasText)
+                    .limit(3)
+                    .collect(Collectors.joining("、"));
+            String focus = names.isEmpty() ? "" : "（重点：" + names + "）";
+            return "该学员有 " + Math.max(weakCount, weak.size()) + " 个薄弱知识点" + focus
+                    + "，建议优先复习这些知识点，并完成对应章节练习。";
+        }
+
+        if (progress == null || progress < 1.0 || rate == null || rate < 0.8) {
+            return "该学员已完成 " + answered + "/" + total + " 题，正确率 " + percent(rate)
+                    + "，建议继续完成剩余题目并复习错题，再进行模拟考试。";
+        }
+
+        int pending = intValue(wrongBook == null ? null : wrongBook.getPending());
+        int high = intValue(wrongBook == null ? null : wrongBook.getHighFrequency());
+        return "该学员已完成本科目全部题目，正确率 " + percent(rate)
+                + "；当前待攻克错题 " + pending + " 道、高频错题 " + high
+                + " 道，建议进行模拟考试并复盘错题。";
+    }
+
+    /** 组装给 DeepSeek 的数据上下文；不包含任何密钥或请求头。 */
+    private String buildAiPrompt(String subject,
+                                 AnalysisOverviewVO overview,
+                                 List<KPStatVO> stats,
+                                 WrongBookSummaryVO wrongBook,
+                                 PageResult<ExamRecordVO> exams) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("科目：").append(subject).append('\n');
+        sb.append("题目总数：").append(intValue(overview == null ? null : overview.getTotalQuestions())).append('\n');
+        sb.append("已答题数：").append(intValue(overview == null ? null : overview.getAnsweredQuestions())).append('\n');
+        sb.append("总体正确率：").append(percent(overview == null ? null : overview.getCorrectRate())).append('\n');
+        sb.append("练习进度：").append(percent(overview == null ? null : overview.getProgress())).append('\n');
+        sb.append("薄弱知识点数量：").append(intValue(overview == null ? null : overview.getWeakCount())).append('\n');
+
+        List<KPStatVO> weak = weakPoints(stats);
+        sb.append("薄弱知识点：");
+        if (weak.isEmpty()) {
+            sb.append("无");
+        } else {
+            sb.append(weak.stream().limit(AI_PROMPT_WEAK_LIMIT)
+                    .map(kp -> kp.getKnowledgePointName() + "（掌握度" + percent(kp.getMastery()) + "）")
+                    .collect(Collectors.joining("；")));
+        }
+        sb.append('\n');
+
+        sb.append("错题统计：待攻克=").append(intValue(wrongBook == null ? null : wrongBook.getPending()))
+                .append("，高频错=").append(intValue(wrongBook == null ? null : wrongBook.getHighFrequency()))
+                .append("，已攻克=").append(intValue(wrongBook == null ? null : wrongBook.getMastered()))
+                .append('\n');
+
+        sb.append("最近模拟考试：");
+        List<ExamRecordVO> records = exams == null ? Collections.emptyList() : exams.getRecords();
+        if (records == null || records.isEmpty()) {
+            sb.append("无");
+        } else {
+            sb.append(records.stream()
+                    .map(e -> e.getPaperTitle() + "(得分" + (e.getScore() == null ? "未知" : e.getScore())
+                            + (Boolean.TRUE.equals(e.getIsPass()) ? "，及格" : "，未及格") + ")")
+                    .collect(Collectors.joining("；")));
+        }
+        return sb.toString();
+    }
+
+    private List<KPStatVO> weakPoints(List<KPStatVO> stats) {
+        if (stats == null) {
+            return Collections.emptyList();
+        }
+        return stats.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getIsWeak()))
+                .collect(Collectors.toList());
+    }
+
+    private static int intValue(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private static String percent(Double value) {
+        return value == null ? "无" : Math.round(value * 100) + "%";
+    }
+
+    private static String aiFailureReason(Integer code) {
+        if (ErrorCode.AI_TIMEOUT.getCode().equals(code)) {
+            return "AI_TIMEOUT";
+        }
+        if (ErrorCode.AI_QUOTA_EXCEEDED.getCode().equals(code)) {
+            return "AI_QUOTA_EXCEEDED";
+        }
+        return "AI_CALL_FAILED";
+    }
+
+    /** 校验并归一化学科编码；只接受四科，避免把未知科目当成"空数据"返回。 */
+    private String requireSubjectCode(String subjectCode) {
+        String subject = subjectCode == null ? "" : subjectCode.trim().toUpperCase();
+        if (!SUBJECT_CODES.contains(subject)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR);
+        }
+        return subject;
+    }
 
     /**
      * 归属校验：把 {@code bindId} 归约为「属于当前教练且仍有效」的一条绑定记录。
@@ -290,6 +661,52 @@ public class CoachStudentServiceImpl implements CoachStudentService {
     }
 
     /**
+     * 本页学员的“当前学习科目”映射。
+     *
+     * <p>规则：READY_FOR_EXAM &gt; LEARNING &gt; EXAM_FAILED &gt; NOT_STARTED；
+     * 同阶段取科目编码较大者（SUBJECT_4 &gt; SUBJECT_3 ...），只是稳定的展示顺序。
+     * EXAM_PASSED 不视为“进行中”，没有其它状态时返回 null，前端显示“暂无进行中科目”。</p>
+     *
+     * <p>一次 IN 查询完成，避免列表 N+1；空集合直接返回空 Map。</p>
+     */
+    private Map<Long, StudentSubjectStatus> loadCurrentStatusMap(Collection<Long> studentIds) {
+        if (studentIds == null || studentIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<StudentSubjectStatus> rows = studentSubjectStatusMapper.selectList(
+                new LambdaQueryWrapper<StudentSubjectStatus>()
+                        .in(StudentSubjectStatus::getStudentId, studentIds));
+        Map<Long, StudentSubjectStatus> map = new HashMap<>();
+        for (StudentSubjectStatus row : rows) {
+            if (currentStatusRank(row.getStatus()) >= 99) {
+                continue;
+            }
+            StudentSubjectStatus prev = map.get(row.getStudentId());
+            if (prev == null || isMoreCurrent(row, prev)) {
+                map.put(row.getStudentId(), row);
+            }
+        }
+        return map;
+    }
+
+    private static int currentStatusRank(String status) {
+        if ("READY_FOR_EXAM".equals(status)) return 0;
+        if ("LEARNING".equals(status)) return 1;
+        if ("EXAM_FAILED".equals(status)) return 2;
+        if ("NOT_STARTED".equals(status)) return 3;
+        return 99;
+    }
+
+    private static boolean isMoreCurrent(StudentSubjectStatus candidate, StudentSubjectStatus current) {
+        int cr = currentStatusRank(candidate.getStatus());
+        int rr = currentStatusRank(current.getStatus());
+        if (cr != rr) return cr < rr;
+        String cs = candidate.getSubjectCode() == null ? "" : candidate.getSubjectCode();
+        String rs = current.getSubjectCode() == null ? "" : current.getSubjectCode();
+        return cs.compareTo(rs) > 0;
+    }
+
+    /**
      * 绑定记录 + 用户信息 → {@code StudentVO}。
      *
      * <p><b>{@code bindId} 取自绑定记录自身的主键（{@code coach_student.id}）</b>，
@@ -300,7 +717,8 @@ public class CoachStudentServiceImpl implements CoachStudentService {
      * <p>姓名 / 电话取不到就留 {@code null}（对方账号被逻辑删除时，绑定记录仍在、姓名留空）——
      * 与预约模块"历史记录要完整"的既定行为一致。</p>
      */
-    private StudentVO toStudentVO(CoachStudent bind, Map<Long, User> userMap) {
+    private StudentVO toStudentVO(CoachStudent bind, Map<Long, User> userMap,
+                                  Map<Long, StudentSubjectStatus> currentStatusMap) {
         StudentVO vo = new StudentVO();
         vo.setBindId(bind.getId());                 // ← 绑定记录 ID（coach_student.id）
         vo.setStudentId(bind.getStudentId());       // ← 学员用户 ID（sys_user.id）
@@ -311,6 +729,13 @@ public class CoachStudentServiceImpl implements CoachStudentService {
             vo.setUsername(student.getUsername());
             vo.setRealName(student.getRealName());
             vo.setPhone(student.getPhone());
+        }
+
+        StudentSubjectStatus current = currentStatusMap.get(bind.getStudentId());
+        if (current != null) {
+            vo.setCurrentSubjectCode(current.getSubjectCode());
+            vo.setCurrentPhaseStatus(current.getStatus());
+            vo.setCoachConfirmStatus(current.getCoachConfirmStatus());
         }
         return vo;
     }

@@ -164,7 +164,7 @@ onMounted(() => void loadAll())
 }
 .ap__toolbar-label {
   font-size: 13px;
-  color: #909399;
+  color: #687589;
 }
 .ap__cards {
   display: grid;
@@ -177,21 +177,21 @@ onMounted(() => void loadAll())
 .ap__stat-value {
   font-size: 24px;
   font-weight: 600;
-  color: #409eff;
+  color: #7597d5;
 }
 .ap__stat-value--warn {
-  color: #f56c6c;
+  color: #c96a6a;
 }
 .ap__stat-label {
   margin-top: 6px;
   font-size: 13px;
-  color: #909399;
+  color: #687589;
 }
 .ap__block {
   margin-top: 16px;
 }
 .ap__warn-text {
-  color: #f56c6c;
+  color: #c96a6a;
   font-weight: 600;
 }
 </style>

@@ -196,12 +196,24 @@
 
 | 方法 | 路径 | 说明 | 关键入参 | data |
 |---|---|---|---|---|
+| POST | `/api/student/chat/sessions` | 获取或创建与指定教练的会话 | coachId | ChatSessionVO |
 | GET | `/api/student/chat/sessions` | 会话列表（含未读数） | — | List&lt;ChatSessionVO&gt; |
-| GET | `/api/student/chat/sessions/{id}/messages` | 增量拉取消息 | lastId, pageSize | List&lt;ChatMessageVO&gt; |
+| GET | `/api/student/chat/sessions/{id}/messages` | 拉取消息 | lastId?, beforeId?, pageSize?（默认 20，上限 50） | List&lt;ChatMessageVO&gt; |
 | POST | `/api/student/chat/sessions/{id}/messages` | 发送消息 | content | ChatMessageVO |
 | PUT | `/api/student/chat/sessions/{id}/read` | 标记已读 | — | Void |
 
-> 会话对象固定为「学员 ↔ 我的教练」，`sessionId` 由后端按 `chat_session` 唯一定位。
+> 会话对象固定为「学员 ↔ 我的教练」，`sessionId` 由后端按 `chat_session` 唯一定位；
+> `POST /sessions` 必须存在有效绑定（`coach_student.status = 1`），否则返回 `3102`；
+> 同一对学员/教练重复调用返回同一会话。
+>
+> 会话不存在、非会话参与者一律返回 `5001`，不泄露存在性。解绑后历史会话和消息仍可读取，
+> 但 `ChatSessionVO.canSend=false`，发送消息返回 `3102`；重新绑定后恢复发送。
+> `ChatSessionVO` 返回对方 `peerUserId / peerName / peerPhone`、`lastMessage / lastMessageTime`、
+> 当前登录角色自己的 `unreadCount` 与 `canSend`。
+>
+> 消息查询默认返回最近一页并按 id 正序；`lastId` 用于轮询新消息，`beforeId` 用于加载更早消息，
+> 两者互斥（同时传返回 `1001`）。消息发送者身份只取 JWT，不接收前端 `senderId / senderRole`；
+> `content` 去首尾空白后不得为空，按 Unicode 字符数不超过 1000；发送与摘要、接收方未读数在同一事务内完成。
 
 ### 4.10 教练端 `/api/coach`
 
@@ -216,8 +228,18 @@
 | GET | `/api/coach/students/{id}/status` | 学员状态详情（各科进度） | List&lt;SubjectStatusVO&gt; |
 | GET | `/api/coach/students/{id}/learning-data` | 学员模拟考历史、正确率、错题数、薄弱知识点 | LearningDataVO |
 | GET | `/api/coach/students/{id}/wrong-book` | 学员错题详情（分页） | PageResult&lt;WrongBookVO&gt; |
+| GET | `/api/coach/students/{id}/ai-suggest` | 读取已保存的学习建议（`subjectCode` 必填） | AiSuggestVO；无建议时 data=null |
 | POST | `/api/coach/students/{id}/ai-suggest` | 生成 AI 考试建议 | AiSuggestVO |
-| PUT | `/api/coach/students/{id}/confirm` | 教练确认建议 | Void |
+| PUT | `/api/coach/students/{id}/confirm` | 教练独立确认/修改当前科目确认状态 | Void |
+
+> `GET /ai-suggest` 只读：`ai_suggest` 非空时 `source=AI`；仅 `exam_ready_suggest` 非空时
+> `source=RULE`，此时历史规则文本未持久化、`suggestion=null`；两者都为空时 `data=null`。
+> 不调用 AI、不写库、不重置 `coach_confirm_status`。请求体确认值见
+> `CONFIRMED_READY / NOT_READY / NEED_HELP`。
+>
+> 学员列表 `StudentVO` 增加 `currentSubjectCode / currentPhaseStatus / coachConfirmStatus`；
+> `confirm` 不依赖 AI 建议是否存在，也不修改建议文本。`coach_confirm_status` 只有当前科目行有值，
+> 未设置时前端显示“待确认”。
 
 **预约处理**
 
@@ -228,7 +250,7 @@
 | PUT | `/api/coach/appointments/{id}/reject` | 拒绝 | Void |
 | PUT | `/api/coach/appointments/{id}/complete` | 标记完成 | Void |
 
-**聊天**：`/api/coach/chat/...` 与 4.9 结构一致（角色互换）。
+**聊天**：`/api/coach/chat/...` 与 4.9 结构一致（角色互换；`POST /sessions` 入参为 `studentId`）。
 
 ### 4.11 管理员端 `/api/admin`
 

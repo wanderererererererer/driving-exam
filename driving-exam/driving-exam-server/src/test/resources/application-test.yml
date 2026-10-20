@@ -21,3 +21,7 @@ spring:
     url: ${TEST_DB_URL}
     username: ${TEST_DB_USER}
     password: ${TEST_DB_PASSWORD}
+
+# 集成测试不启动超时考试定时任务，避免测试期间产生额外业务扫描/写入
+exam:
+  timeout-scan-enabled: false

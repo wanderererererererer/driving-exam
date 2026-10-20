@@ -183,13 +183,13 @@ onUnmounted(clearAllTimers)
   cursor: default;
 }
 .cml__bubble--user {
-  background: #409eff;
+  background: #7597d5;
   color: #fff;
   border-top-right-radius: 2px;
 }
 .cml__bubble--ai {
-  background: #f4f4f5;
-  color: #303133;
+  background: #f2f4f7;
+  color: #263449;
   border-top-left-radius: 2px;
   cursor: pointer; /* 提示"可点立即显示全文" */
 }

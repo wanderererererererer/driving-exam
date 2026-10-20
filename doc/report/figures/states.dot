@@ -1,0 +1,26 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", fontname="Noto Sans CJK SC", fontsize=11, pad=0.25, nodesep=0.35, ranksep=0.55];
+  node [shape=box, style="rounded,filled", color="#B9C9DF", fillcolor="#F5F8FD", fontname="Noto Sans CJK SC", fontsize=10, margin="0.16,0.09"];
+  edge [color="#7C93B8", fontname="Noto Sans CJK SC", fontsize=9, arrowsize=0.65];
+
+  subgraph cluster_appt {
+    label="预约状态"; fontname="Noto Sans CJK SC"; color="#DCE3EC"; style="rounded";
+    P [label="PENDING\n待确认"];
+    C [label="CONFIRMED\n已确认"];
+    X [label="CANCELLED\n已取消"];
+    R [label="REJECTED\n已拒绝"];
+    D [label="COMPLETED\n已完成"];
+    P -> C [label="教练通过"];
+    P -> X [label="学员取消"];
+    P -> R [label="教练拒绝"];
+    C -> D [label="教练完成"];
+  }
+  subgraph cluster_exam {
+    label="模拟考试状态"; fontname="Noto Sans CJK SC"; color="#DCE3EC"; style="rounded";
+    O [label="ONGOING\n进行中"];
+    S [label="SUBMITTED\n已交卷"];
+    T [label="TIMEOUT\n超时收尾"];
+    O -> S [label="手动交卷"];
+    O -> T [label="超时/定时任务"];
+  }
+}

@@ -132,7 +132,7 @@ async function onMaster(item: WrongBookItemVO) {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid #f1f4f9;
 }
 .wbl__row:last-child {
   border-bottom: none;
@@ -146,7 +146,7 @@ async function onMaster(item: WrongBookItemVO) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #303133;
+  color: #263449;
 }
 .wbl__meta {
   margin-top: 6px;
@@ -154,7 +154,7 @@ async function onMaster(item: WrongBookItemVO) {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #909399;
+  color: #687589;
 }
 .wbl__actions {
   flex: none;

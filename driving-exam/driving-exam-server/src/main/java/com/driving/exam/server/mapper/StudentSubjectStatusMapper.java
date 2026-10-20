@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
+
 /**
  * 学员科目进度 Mapper。
  *
@@ -59,4 +61,47 @@ public interface StudentSubjectStatusMapper extends BaseMapper<StudentSubjectSta
                           @Param("subjectCode") String subjectCode,
                           @Param("status") String status,
                           @Param("coachRemark") String coachRemark);
+
+    /**
+     * 覆盖写入一次学习建议（AI 成功或规则降级）。
+     *
+     * <p>按 {@code (student_id, subject_code)} 唯一键 upsert；不触碰
+     * {@code coach_confirm_status}，因为教练确认与 AI 建议是独立职责。
+     * AI 失败时调用方传 {@code aiSuggest=null} / {@code aiSuggestTime=null}，
+     * 从而不会留下“本次 AI 成功”的痕迹。</p>
+     *
+     * @param examReadySuggest 规则建议（READY / NEED_MORE / NEED_HELP）
+     * @param aiSuggest        AI 建议文本；规则降级时为 null
+     * @param aiSuggestTime    AI 生成时间；规则降级时为 null
+     */
+    @Insert("INSERT INTO student_subject_status "
+            + "(student_id, subject_code, exam_ready_suggest, ai_suggest, ai_suggest_time, create_time, update_time) "
+            + "VALUES (#{studentId}, #{subjectCode}, #{examReadySuggest,jdbcType=VARCHAR}, "
+            + "#{aiSuggest,jdbcType=VARCHAR}, #{aiSuggestTime,jdbcType=TIMESTAMP}, NOW(), NOW()) "
+            + "ON DUPLICATE KEY UPDATE "
+            + "exam_ready_suggest = #{examReadySuggest,jdbcType=VARCHAR}, "
+            + "ai_suggest = #{aiSuggest,jdbcType=VARCHAR}, "
+            + "ai_suggest_time = #{aiSuggestTime,jdbcType=TIMESTAMP}, "
+            + "update_time = NOW()")
+    int upsertAiSuggestion(@Param("studentId") Long studentId,
+                           @Param("subjectCode") String subjectCode,
+                           @Param("examReadySuggest") String examReadySuggest,
+                           @Param("aiSuggest") String aiSuggest,
+                           @Param("aiSuggestTime") LocalDateTime aiSuggestTime);
+
+    /**
+     * 教练独立确认/修改确认状态；不要求已存在 AI 或规则建议。
+     *
+     * <p>不存在行时创建（status 走数据库默认值 NOT_STARTED），存在时只改
+     * {@code coach_confirm_status}，不触碰建议文本、时间或其他学情字段。</p>
+     */
+    @Insert("INSERT INTO student_subject_status "
+            + "(student_id, subject_code, coach_confirm_status, create_time, update_time) "
+            + "VALUES (#{studentId}, #{subjectCode}, #{confirmStatus,jdbcType=VARCHAR}, NOW(), NOW()) "
+            + "ON DUPLICATE KEY UPDATE "
+            + "coach_confirm_status = #{confirmStatus,jdbcType=VARCHAR}, "
+            + "update_time = NOW()")
+    int upsertCoachConfirm(@Param("studentId") Long studentId,
+                           @Param("subjectCode") String subjectCode,
+                           @Param("confirmStatus") String confirmStatus);
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
@@ -18,8 +19,17 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-const handleLogout = () => {
-  ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' })
+const displayName = computed(
+  () => userStore.userInfo?.realName || userStore.userInfo?.username || '管理员',
+)
+const avatarText = computed(() => displayName.value.slice(0, 1))
+
+const handleLogout = (): void => {
+  ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
+    type: 'warning',
+    confirmButtonText: '退出',
+    cancelButtonText: '取消',
+  })
     .then(() => {
       userStore.logout()
       router.push('/login')
@@ -29,22 +39,27 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <el-container class="layout">
-    <el-header class="layout__header">
-      <div class="layout__brand">驾考智能辅导系统 · 管理端</div>
-      <div class="layout__user">
-        <span class="layout__name">
-          {{ userStore.userInfo?.realName || userStore.userInfo?.username || '未登录' }}
-        </span>
+  <el-container class="app-layout app-layout--admin">
+    <el-header class="app-header">
+      <div class="app-brand">
+        <span class="app-brand__mark">驾</span>
+        <span>驾考智能辅导系统</span>
+        <span class="app-brand__sub">管理端</span>
+      </div>
+      <div class="app-header__right">
+        <div class="app-user">
+          <span class="app-user__avatar">{{ avatarText }}</span>
+          <span>{{ displayName }}</span>
+        </div>
         <el-button link type="primary" @click="handleLogout">退出登录</el-button>
       </div>
     </el-header>
 
-    <el-container class="layout__body">
-      <el-aside width="210px" class="layout__aside">
-        <el-menu :default-active="route.path" router class="layout__menu">
+    <el-container class="app-body">
+      <el-aside class="app-aside">
+        <el-menu :default-active="route.path" router class="app-menu">
           <el-menu-item index="/admin/dashboard">
-            <el-icon><DataLine /></el-icon><span>数据概览</span>
+            <el-icon><DataLine /></el-icon><span>工作台</span>
           </el-menu-item>
           <el-menu-item index="/admin/users">
             <el-icon><User /></el-icon><span>用户管理</span>
@@ -73,47 +88,9 @@ const handleLogout = () => {
         </el-menu>
       </el-aside>
 
-      <el-main class="layout__main">
+      <el-main class="app-main">
         <router-view />
       </el-main>
     </el-container>
   </el-container>
 </template>
-
-<style scoped>
-.layout {
-  height: 100vh;
-}
-.layout__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
-}
-.layout__brand {
-  font-size: 18px;
-  font-weight: 600;
-}
-.layout__user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.layout__name {
-  color: #606266;
-}
-.layout__body {
-  height: calc(100vh - 60px);
-}
-.layout__aside {
-  background: #fff;
-  border-right: 1px solid #e4e7ed;
-}
-.layout__menu {
-  border-right: none;
-}
-.layout__main {
-  background: #f5f7fa;
-}
-</style>

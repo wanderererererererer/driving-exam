@@ -114,7 +114,7 @@ async function onDelete(session: AiSessionVO): Promise<void> {
   background: #f5f7fa;
 }
 .hd__q {
-  color: #303133;
+  color: #263449;
   font-size: 14px;
   line-height: 1.5;
   /* 截断为最多两行 */
@@ -130,11 +130,11 @@ async function onDelete(session: AiSessionVO): Promise<void> {
   margin-top: 4px;
 }
 .hd__time {
-  color: #909399;
+  color: #687589;
   font-size: 12px;
 }
 .hd__count {
-  color: #909399;
+  color: #687589;
   font-size: 12px;
 }
 .hd__more {
@@ -142,7 +142,7 @@ async function onDelete(session: AiSessionVO): Promise<void> {
   text-align: center;
 }
 .hd__end {
-  color: #c0c4cc;
+  color: #a3adbb;
   font-size: 12px;
 }
 </style>

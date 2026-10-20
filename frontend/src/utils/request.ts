@@ -41,9 +41,9 @@ service.interceptors.response.use(
 
     const status = error.response?.status
     if (status === 401) {
-      // 未认证 / 登录失效：清 token 并跳转登录页
+      // 未认证 / 登录失效：清 token 并跳转登录页；后端可能返回更具体的账号禁用/角色变更消息
       clearAuth()
-      ElMessage.error('登录已失效，请重新登录')
+      ElMessage.error(error.response?.data?.message || '登录已失效，请重新登录')
       if (router.currentRoute.value.path !== '/login') {
         router.push({
           path: '/login',

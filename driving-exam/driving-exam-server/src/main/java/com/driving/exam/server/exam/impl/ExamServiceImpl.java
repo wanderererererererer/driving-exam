@@ -27,7 +27,9 @@ import com.driving.exam.server.mapper.ExamPaperQuestionMapper;
 import com.driving.exam.server.mapper.MockExamAnswerMapper;
 import com.driving.exam.server.mapper.MockExamMapper;
 import com.driving.exam.server.service.QuestionService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -42,12 +44,13 @@ import java.util.stream.Collectors;
 /**
  * 模拟考试 Service 实现。
  *
- * <p><b>本类不做事务</b>：所有写库的原子性由 {@link ExamFinalizer}（独立 Bean + {@code @Transactional}）承担。
- * 交卷与超时收尾一律**通过注入的 Bean 调用** {@code examFinalizer.xxx(...)}——跨 Bean 才走 AOP 代理，
- * 若写成本类私有方法则事务失效。</p>
+ * <p><b>事务边界</b>：结算写库由 {@link ExamFinalizer}（独立 Bean + {@code @Transactional}）承担；
+ * {@link #start(Long, Long)} 额外用试卷行锁和本地事务串行化同一试卷的并发开考。
+ * 交卷与超时收尾一律通过注入的 Bean 调用 {@code examFinalizer.xxx(...)}——跨 Bean 才走 AOP 代理。</p>
  *
  * <p>口径详见 {@code doc/exam-design.md}。</p>
  */
+@Slf4j
 @Service
 public class ExamServiceImpl implements ExamService {
 
@@ -125,8 +128,10 @@ public class ExamServiceImpl implements ExamService {
     /* ============================== 2. 开始考试 ============================== */
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public ExamVO start(Long userId, Long paperId) {
-        ExamPaper paper = loadPaper(paperId);
+        // 锁定试卷行：同一试卷的并发开始请求串行化，避免“查无进行中 → 两次插入”
+        ExamPaper paper = loadPaperForUpdate(paperId);
 
         MockExam ongoing = findOngoing(userId, paperId);
         if (ongoing != null) {
@@ -151,7 +156,8 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public ExamVO resume(Long userId, Long examId) {
         MockExam exam = loadOwnedExam(userId, examId);
-        ExamPaper paper = loadPaper(exam.getPaperId());
+        // 已开始的考试即使试卷之后被停用，也必须能恢复/交卷/查看历史报告
+        ExamPaper paper = loadPaperForExistingExam(exam.getPaperId());
 
         if (ExamStatus.ONGOING.name().equals(exam.getStatus()) && isTimeout(exam, paper)) {
             // 惰性超时收尾（本方法名义 GET，实际会写库）
@@ -172,7 +178,21 @@ public class ExamServiceImpl implements ExamService {
         if (!ExamStatus.ONGOING.name().equals(exam.getStatus())) {
             throw new BusinessException(ErrorCode.EXAM_SUBMITTED);
         }
-        // 不拦超时：允许在超时边缘/网络延迟下写入，超时由 submit 统一判定
+        if (dto == null || dto.getQuestionId() == null
+                || dto.getUserAnswer() == null || dto.getUserAnswer().isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR);
+        }
+
+        ExamPaper paper = loadPaperForExistingExam(exam.getPaperId());
+        assertQuestionInPaper(paper.getId(), dto.getQuestionId());
+
+        // 服务端时间已超时：先按超时结算，再拒绝这次延迟到达的答案；
+        // 不能把“超时后的暂存”留成一场仍可继续的 ONGOING 考试。
+        if (isTimeout(exam, paper)) {
+            finalizeAsTimeout(exam, paper);
+            throw new BusinessException(ErrorCode.EXAM_SUBMITTED);
+        }
+
         mockExamAnswerMapper.upsertAnswer(examId, dto.getQuestionId(), dto.getUserAnswer());
     }
 
@@ -181,22 +201,31 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public ExamReportVO submit(Long userId, Long examId, ExamSubmitDTO dto) {
         MockExam exam = loadOwnedExam(userId, examId);
-        ExamPaper paper = loadPaper(exam.getPaperId());
+        // 已开始的考试允许在试卷停用后继续交卷/查看报告
+        ExamPaper paper = loadPaperForExistingExam(exam.getPaperId());
         List<PaperQuestionItem> items = loadPaperItems(paper.getId());
+        Set<Long> paperQuestionIds = items.stream()
+                .map(it -> it.question().getId())
+                .collect(Collectors.toSet());
 
         // 幂等：已交卷直接返回既有报告（不报错、不重复写库）
         if (!ExamStatus.ONGOING.name().equals(exam.getStatus())) {
             return examFinalizer.buildReport(exam, items);
         }
 
-        // 答案集 = 暂存草稿 ∪ 请求体（请求体优先）。并集绝不丢答案；
-        // finalize 只遍历试卷内题目，多余 id 自动忽略，无需额外校验。
+        // 答案集 = 暂存草稿 ∪ 请求体（请求体优先）。请求体中的题必须属于本卷；
+        // 历史草稿中的多余额外 ID 不回灌到报告（只保留试卷内题目）。
         Map<Long, String> answers = loadAnsweredMap(examId);
+        answers.keySet().removeIf(questionId -> !paperQuestionIds.contains(questionId));
         if (dto != null && dto.getAnswers() != null) {
             for (ExamAnswerDTO a : dto.getAnswers()) {
-                if (a != null && a.getQuestionId() != null) {
-                    answers.put(a.getQuestionId(), a.getUserAnswer());
+                if (a == null || a.getQuestionId() == null) {
+                    throw new BusinessException(ErrorCode.PARAM_ERROR);
                 }
+                if (!paperQuestionIds.contains(a.getQuestionId())) {
+                    throw new BusinessException(ErrorCode.PARAM_ERROR);
+                }
+                answers.put(a.getQuestionId(), a.getUserAnswer());
             }
         }
 
@@ -226,7 +255,7 @@ public class ExamServiceImpl implements ExamService {
             // 进行中无报告（前端应先 resume/submit 触发收尾）
             throw new BusinessException(ErrorCode.EXAM_ONGOING);
         }
-        ExamPaper paper = loadPaper(exam.getPaperId());
+        ExamPaper paper = loadPaperForExistingExam(exam.getPaperId());
         return examFinalizer.buildReport(exam, loadPaperItems(paper.getId()));
     }
 
@@ -238,7 +267,7 @@ public class ExamServiceImpl implements ExamService {
         if (!ExamStatus.ONGOING.name().equals(exam.getStatus())) {
             throw new BusinessException(ErrorCode.EXAM_SUBMITTED); // 已交卷/超时 → 2102
         }
-        ExamPaper paper = loadPaper(exam.getPaperId());
+        ExamPaper paper = loadPaperForExistingExam(exam.getPaperId());
         // 校验题目属于当前试卷；不属于 → 1001
         PaperQuestionItem target = loadPaperItems(paper.getId()).stream()
                 .filter(it -> it.question().getId().equals(questionId))
@@ -307,6 +336,41 @@ public class ExamServiceImpl implements ExamService {
         return new PageResult<>(page.getTotal(), page.getPages(), page.getCurrent(), page.getSize(), vos);
     }
 
+    /* ========================= 9. 定时超时收尾 ========================= */
+
+    @Override
+    public int finalizeExpiredExams(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 200));
+        List<Long> expiredIds = mockExamMapper.selectExpiredOngoingIds(safeLimit);
+        if (expiredIds == null || expiredIds.isEmpty()) {
+            return 0;
+        }
+        int settled = 0;
+        for (Long examId : expiredIds) {
+            try {
+                MockExam exam = mockExamMapper.selectById(examId);
+                if (exam == null || !ExamStatus.ONGOING.name().equals(exam.getStatus())) {
+                    continue;
+                }
+                ExamPaper paper = loadPaperForExistingExam(exam.getPaperId());
+                if (!isTimeout(exam, paper)) {
+                    continue; // 查询与处理之间被手动交卷，或数据库/应用时钟边界
+                }
+                List<PaperQuestionItem> items = loadPaperItems(paper.getId());
+                ExamReportVO report = examFinalizer.finalize(
+                        exam, paper.getDuration(), items, loadAnsweredMap(examId), true);
+                if (report != null) {
+                    settled++;
+                    log.info("超时考试已自动收尾 examId={}", examId);
+                }
+            } catch (RuntimeException e) {
+                // 单场异常不阻塞其它考试；下一轮扫描会再次尝试
+                log.warn("超时考试自动收尾失败 examId={} msg={}", examId, e.getMessage(), e);
+            }
+        }
+        return settled;
+    }
+
     /* ============================== 私有工具 ============================== */
 
     /** 归属校验：不存在或非本人**统一**抛 2104（不泄露存在性）。 */
@@ -318,13 +382,44 @@ public class ExamServiceImpl implements ExamService {
         return exam;
     }
 
-    /** 试卷校验：不存在或已停用 → 2101。 */
-    private ExamPaper loadPaper(Long paperId) {
-        ExamPaper paper = examPaperMapper.selectById(paperId);
+    /** 开考事务内锁定试卷行，校验存在且启用。 */
+    private ExamPaper loadPaperForUpdate(Long paperId) {
+        ExamPaper paper = examPaperMapper.selectByIdForUpdate(paperId);
         if (paper == null || !Integer.valueOf(PAPER_STATUS_ENABLED).equals(paper.getStatus())) {
             throw new BusinessException(ErrorCode.PAPER_NOT_FOUND);
         }
         return paper;
+    }
+
+    /**
+     * 已开始考试的试卷读取：允许试卷后来被停用。
+     *
+     * <p>停用只应影响“新开考”，不能让已经存在的考试无法恢复、交卷或查看报告；
+     * 试卷内容变更仍由管理员端的一致性保护禁止。</p>
+     */
+    private ExamPaper loadPaperForExistingExam(Long paperId) {
+        ExamPaper paper = examPaperMapper.selectById(paperId);
+        if (paper == null) {
+            throw new BusinessException(ErrorCode.PAPER_NOT_FOUND);
+        }
+        return paper;
+    }
+
+    /** 校验题目属于当前考试对应的试卷；不属于 → 1001。 */
+    private void assertQuestionInPaper(Long paperId, Long questionId) {
+        Long count = examPaperQuestionMapper.selectCount(
+                new LambdaQueryWrapper<ExamPaperQuestion>()
+                        .eq(ExamPaperQuestion::getPaperId, paperId)
+                        .eq(ExamPaperQuestion::getQuestionId, questionId));
+        if (count == null || count == 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR);
+        }
+    }
+
+    /** 超时收尾复用现有条件抢占；并发下返回 null 表示已由他方结算。 */
+    private void finalizeAsTimeout(MockExam exam, ExamPaper paper) {
+        List<PaperQuestionItem> items = loadPaperItems(paper.getId());
+        examFinalizer.finalize(exam, paper.getDuration(), items, loadAnsweredMap(exam.getId()), true);
     }
 
     /** 校验整份试卷题型可判分；存在不可判分题型 → {@code EXAM_PAPER_INVALID(2106)}。 */
